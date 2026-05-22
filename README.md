@@ -1,46 +1,91 @@
 # sallyn-skill
 
-[Claude Code](https://docs.claude.com/en/docs/claude-code/overview) / Claude Agent SDK 的个人 skill 集合。仓库按 [skills.sh](https://skills.sh/) CLI 可发现的结构组织，每个 `skills/<skill-name>/` 子目录是一个独立的 skill，包含 `SKILL.md` 以及该 skill 需要的 scripts、evals 等资源。
+[![skills.sh](https://img.shields.io/badge/skills.sh-compatible-111827)](https://skills.sh/)
+[![agent skills](https://img.shields.io/badge/coding%20agent-skills-2563eb)](https://github.com/vercel-labs/skills)
+[![license](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-## Skill 一览
+面向各类 coding agent 的个人 skill 集合。仓库采用 [skills.sh](https://skills.sh/) CLI 可发现的目录结构组织,可以安装到 Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen Code 等支持 agent skills 的工具中。
 
-| 名称 | 简介 |
-|---|---|
-| [`subtitle-translator`](./skills/subtitle-translator) | 把外语 SRT 字幕(日语/英语/韩语等)翻译为中文,包含转录纠错、字幕结构规范化、标点与时间码规范化的完整四步流水线 |
+> [!NOTE]
+> 这个仓库不是 Claude Code 专用仓库。只要你的 agent 支持 `skills` CLI 或兼容 `SKILL.md` 目录规范,就可以使用这里的 skills。
 
-## 安装
+## Skills
 
-使用 `skills` CLI 从 GitHub 安装:
+| Skill | Tags | Description |
+|---|---|---|
+| [`subtitle-translator`](./skills/subtitle-translator) | `srt`, `subtitle`, `translation`, `chinese`, `asr-cleanup` | 把外语 SRT 字幕翻译为中文,包含转录纠错、字幕结构规范化、标点与时间码规范化的完整流程。 |
+
+## Install
+
+列出仓库内可安装的 skills:
 
 ```bash
-# 列出仓库内可安装的 skills
 npx skills add Sallyn0225/sallyn-skill --list
+```
 
-# 安装指定 skill
+安装指定 skill:
+
+```bash
 npx skills add Sallyn0225/sallyn-skill --skill subtitle-translator
+```
 
-# 或安装仓库内全部 skills
+安装仓库内全部 skills:
+
+```bash
 npx skills add Sallyn0225/sallyn-skill --all
 ```
 
-全局安装可加 `-g`。安装后,支持 skills 的 agent 会按各自 `SKILL.md` 头部 `description` 字段中描述的触发条件自动加载。
+全局安装可加 `-g`:
 
-## 仓库结构
-
+```bash
+npx skills add Sallyn0225/sallyn-skill --skill subtitle-translator -g
 ```
+
+安装到指定 agent 可使用 `--agent`:
+
+```bash
+npx skills add Sallyn0225/sallyn-skill --skill subtitle-translator --agent codex
+npx skills add Sallyn0225/sallyn-skill --skill subtitle-translator --agent claude-code
+```
+
+## Repository Layout
+
+```text
 sallyn-skill/
 ├── README.md
 ├── LICENSE
-├── .gitignore
 └── skills/
     └── <skill-name>/
-        ├── SKILL.md       # 必需:skill 元信息和正文
-        ├── scripts/       # 可选:skill 调用的脚本
-        └── evals/         # 可选:skill 的评测样例
+        ├── SKILL.md       # Required: skill metadata and instructions
+        ├── scripts/       # Optional: helper scripts used by the skill
+        └── evals/         # Optional: evaluation prompts or fixtures
 ```
 
-每个 `SKILL.md` 头部使用 YAML frontmatter 声明 `name` 和 `description`,详见各 skill 目录。
+每个 skill 都是一个独立目录,并通过 `SKILL.md` 顶部的 YAML frontmatter 声明 `name` 和 `description`。`skills` CLI 会读取这些字段来展示、筛选和安装 skill。
 
-## License
+## Local Development
 
-[MIT](./LICENSE)
+在本地检查仓库是否能被 `skills` CLI 识别:
+
+```bash
+npx skills add . --list
+```
+
+新建 skill 时,推荐放在 `skills/<skill-name>/` 下:
+
+```bash
+npx skills init skills/my-skill
+```
+
+也可以手动创建目录,但至少需要包含:
+
+```markdown
+---
+name: my-skill
+description: What this skill does and when to use it.
+---
+```
+
+## Topics
+
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`
