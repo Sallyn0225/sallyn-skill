@@ -1,0 +1,25 @@
+{
+  "skill_name": "subtitle-translator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "cut01-with-hotwords",
+      "prompt": "工作目录里有日语字幕和热词表。请把它翻译成中文。",
+      "expected_output": "工作目录下生成 chisa84-cut01_zh.srt。内容: (1) 中文翻译流畅; (2) 每条字幕末尾无单个标点; (3) 字幕中间的单个标点已替换为单个空格; (4) 成对符号 (「」 《》 等) 保留; (5) 同条字幕无内部换行; (6) 相邻字幕的时间间隔要么为 0, 要么 ≥ 1000ms; (7) 专有名词 (シャニマス、L'Antica、田中摩美々 等) 保留原文写法。",
+      "files": [
+        "E:/Download/菅沼千纱84/chisa84-cut01_jpn.srt",
+        "E:/Download/菅沼千纱84/热词表.txt"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "cut02-with-hotwords",
+      "prompt": "请把这个 srt 翻译成中文。",
+      "expected_output": "工作目录下生成 chisa84-cut02_zh.srt, 符合所有翻译规范(末尾无标点、中间标点替换为空格、时间无缝、成对符号保留、专有名词写正字)。",
+      "files": [
+        "E:/Download/菅沼千纱84/chisa84-cut02_jpn.srt",
+        "E:/Download/菅沼千纱84/热词表.txt"
+      ]
+    }
+  ]
+}
