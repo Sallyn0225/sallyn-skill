@@ -4,10 +4,10 @@
 [![agent skills](https://img.shields.io/badge/coding%20agent-skills-2563eb)](https://github.com/vercel-labs/skills)
 [![license](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-面向各类 coding agent 的个人 skill 集合。仓库采用 [skills.sh](https://skills.sh/) CLI 可发现的目录结构组织,可以安装到 Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen Code 等支持 agent skills 的工具中。
+sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合。这里的 skills 主要记录可复用的工作流、处理规范和配套脚本,并按 [skills.sh](https://skills.sh/) CLI 可发现的目录结构组织,方便安装到 Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen Code 等支持 agent skills 的工具中。
 
 > [!NOTE]
-> 这个仓库不是 Claude Code 专用仓库。只要你的 agent 支持 `skills` CLI 或兼容 `SKILL.md` 目录规范,就可以使用这里的 skills。
+> 这是 sallyn 的个人沉淀仓库,不是某个 agent 的专用扩展包。只要你的 agent 支持 `skills` CLI 或兼容 `SKILL.md` 目录规范,就可以使用这里的 skills。
 
 ## Skills
 
