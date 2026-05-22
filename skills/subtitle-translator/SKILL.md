@@ -1,6 +1,10 @@
 ---
 name: subtitle-translator
-description: 把外语 SRT 字幕(日语/英语/韩语等)翻译为中文,并完成转录纠错、字幕结构规范化、标点与时间码规范化的完整流程。Use this skill whenever the user wants to: translate SRT subtitle files to Chinese; localize Japanese/English/Korean/other foreign-language subtitles to Chinese; clean up auto-transcribed subtitles (fix typos produced by speech-to-text, normalize odd line splits, merge fragmented entries, repair mis-split adjacent lines); process *_jpn.srt / *_eng.srt / *_kor.srt or similarly suffixed files in the working directory; or post-process subtitles produced by Whisper / FunASR / similar transcription models. Trigger even if the user only says "翻译字幕" / "把这个 srt 翻译成中文" / "处理一下这个字幕" / mentions a hotword list (热词表) / shows a transcribed SRT file in conversation. Do not skip this skill just because the user phrases the request casually.
+description: >-
+  Translate and normalize foreign-language SRT subtitles into Chinese. Use this
+  skill when the user asks to translate, localize, clean up, normalize, or
+  post-process SRT subtitle files, including Japanese, English, Korean,
+  Whisper, FunASR, or other ASR-generated subtitles.
 ---
 
 # subtitle-translator
@@ -249,7 +253,7 @@ mkdir -p "<原字幕所在目录>/<主名>_work"
 python "<skill_dir>/scripts/postprocess.py" <input.srt> <output.srt>
 ```
 
-`<skill_dir>` 是本 skill 的安装目录,通常是 `~/.claude/skills/subtitle-translator/`(具体根据系统而定,可以用 SKILL.md 的路径反推)。
+`<skill_dir>` 是本 skill 的安装目录,根据当前 `SKILL.md` 所在目录反推即可。
 
 允许 input 和 output 是同一路径,即"原地规范化"。脚本会做以下事:
 
@@ -286,7 +290,7 @@ E:/Download/菅沼千纱84/
 
 4. **Step 4**: 读 `_fixed.srt`,翻译为中文写入 `chisa84-cut01_work/chisa84-cut01_zh.srt`,然后:
    ```bash
-   python "C:/Users/z1921/.claude/skills/subtitle-translator/scripts/postprocess.py" \
+   python "<skill_dir>/scripts/postprocess.py" \
      "E:/Download/菅沼千纱84/chisa84-cut01_work/chisa84-cut01_zh.srt" \
      "E:/Download/菅沼千纱84/chisa84-cut01_work/chisa84-cut01_zh.srt"
    ```
