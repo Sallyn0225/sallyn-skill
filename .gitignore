@@ -25,3 +25,6 @@ desktop.ini
 # Skill 运行时产物(实际字幕处理输出,不应入仓)
 *_zh.srt
 *_fixed.srt
+
+# skill-creator 测试工作区(评测产物,不入仓)
+skills/*-workspace/
