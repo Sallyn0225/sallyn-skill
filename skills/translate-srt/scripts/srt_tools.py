@@ -2,13 +2,16 @@
 """SRT 清理工具。文本规范的完整定义见 ../references/subtitle-rules.md。
 
 用法:
+  python srt_tools.py init <original.srt>      # 建工作区:复制原 srt + AGENTS.md + _context/(占位 brief/glossary + 空 research)
   python srt_tools.py normalize in.srt -o out.srt   # 解析+行合并+时间轴校验+重编号(修正阶段用)
   python srt_tools.py clean in.srt -o out.srt       # normalize + 标点规范化(译文阶段用)
   python srt_tools.py --self-test
 """
 import argparse
 import re
+import shutil
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -111,7 +114,102 @@ def serialize(entries):
     )
 
 
+AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
+
+本目录是 `{stem}.srt` 的翻译工作区。外部原始字幕保持不动，所有产出都在本目录内。
+
+## 文件布局
+
+- `{stem}.srt` — 原始字幕副本（不要直接改，改带后缀的产物）
+- `{stem}_fix.srt` — 转录修正稿（原语言，纠正听录错误）
+- `{stem}_<lang>.srt` — 翻译初稿
+- `{stem}_<lang>_fix.srt` — 复核终稿
+- `AGENTS.md` — 本文件，说明结构与流程
+- `_context/` — 背景资料区
+  - `brief.md` — 背景简报：内容概述、专名、疑似听录错误。修正/翻译/复核前都要读。
+  - `glossary.md` — 术语表：原语言 → 目标语言标准译名。翻译/复核必须遵循。
+  - `research/` — 调研子代理产出的原始文件（`NN-topic.md`）。简报与术语表由它提炼而来；不够时回这里查细节。
+
+## 流程
+
+1. 建工作目录（已完成，由 `srt_tools.py init` 生成本文件与 `_context/` 占位）
+2. 问清原始/目标语言与主题；通读 `{stem}.srt` 提炼专名；派调研子代理把结果写入 `_context/research/`；主代理读调研文件后编辑 `_context/brief.md` 和 `_context/glossary.md`
+3. 主代理对照简报/术语表修正转录 → `{stem}_fix.srt`，跑 `normalize`
+4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ `{stem}_<lang>.srt`，跑 `clean`
+5. 派复核子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ `{stem}_<lang>_fix.srt`，跑 `clean`
+6. 主代理抽查终稿，向用户报告产出路径、术语表、修正要点
+"""
+
+BRIEF_MD_TEMPLATE = """# 背景简报 — {stem}
+
+> 占位文件。第 2 步调研完成后，由主代理根据 `_context/research/` 下的调研文件编辑替换本内容。
+
+## 内容概述
+
+（待填）
+
+## 专名
+
+（待填）
+
+## 疑似听录错误
+
+（待填）
+"""
+
+GLOSSARY_MD_TEMPLATE = """# 术语表 — {stem}
+
+> 占位文件。第 2 步调研完成后，由主代理编辑替换本内容。
+> 格式：`原语言写法 → 目标语言标准译名`，查不到标"自拟"。
+
+（待填）
+"""
+
+
+def init_workspace(original_srt):
+    """在原 srt 同目录建 <stem>/ 工作区：复制原 srt、写 AGENTS.md、占位 brief/glossary、空 research/。"""
+    src = Path(original_srt).expanduser().resolve()
+    if not src.is_file() or src.suffix.lower() != ".srt":
+        sys.exit(f"错误: {src} 不是有效的 .srt 文件")
+    stem = src.stem
+    workdir = src.parent / stem
+    if workdir.exists():
+        sys.exit(f"错误: 工作目录已存在: {workdir}（如需复用请手动检查，本脚本不覆盖）")
+    context = workdir / "_context"
+    research = context / "research"
+    workdir.mkdir()
+    context.mkdir()
+    research.mkdir()
+    shutil.copy2(src, workdir / src.name)
+    (workdir / "AGENTS.md").write_text(AGENTS_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
+    (context / "brief.md").write_text(BRIEF_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
+    (context / "glossary.md").write_text(GLOSSARY_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
+    print(f"OK: 工作区已创建 -> {workdir}")
+    print(f"  - {workdir / src.name}")
+    print(f"  - {workdir / 'AGENTS.md'}")
+    print(f"  - {context / 'brief.md'} (占位)")
+    print(f"  - {context / 'glossary.md'} (占位)")
+    print(f"  - {research} (空)")
+
+
 def self_test():
+    # init 子命令：建临时 srt，跑 init，检查结构，再清理
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "how-to-code.srt"
+        src.write_text("1\n00:00:01,000 --> 00:00:02,000\nhello\n", encoding="utf-8")
+        init_workspace(str(src))
+        wd = Path(d) / "how-to-code"
+        assert (wd / "how-to-code.srt").read_text(encoding="utf-8").startswith("1\n")
+        assert "how-to-code" in (wd / "AGENTS.md").read_text(encoding="utf-8")
+        assert "待填" in (wd / "_context" / "brief.md").read_text(encoding="utf-8")
+        assert "待填" in (wd / "_context" / "glossary.md").read_text(encoding="utf-8")
+        assert (wd / "_context" / "research").is_dir()
+        # 已存在应报错
+        try:
+            init_workspace(str(src))
+            raise AssertionError("重复 init 应报错")
+        except SystemExit:
+            pass
     assert _join_lines(["えっと、", "それはね"]) == "えっと、それはね"
     assert _join_lines(["Hello", "world"]) == "Hello world"
     assert clean_text("、你好,世界。") == "你好 世界"
@@ -130,7 +228,7 @@ def self_test():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode", choices=["normalize", "clean"], nargs="?")
+    ap.add_argument("mode", choices=["init", "normalize", "clean"], nargs="?")
     ap.add_argument("input", nargs="?")
     ap.add_argument("-o", "--output")
     ap.add_argument("--self-test", action="store_true")
@@ -139,6 +237,8 @@ def main():
         return self_test()
     if not args.mode or not args.input:
         ap.error("需要 mode 和 input 参数")
+    if args.mode == "init":
+        return init_workspace(args.input)
     entries = process(Path(args.input).read_text(encoding="utf-8-sig"), args.mode)
     out = args.output or args.input
     Path(out).write_text(serialize(entries), encoding="utf-8", newline="\n")
