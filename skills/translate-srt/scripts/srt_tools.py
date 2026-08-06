@@ -4,7 +4,7 @@
 用法:
   python srt_tools.py init <original.srt>      # 建工作区:复制原 srt + AGENTS.md + _context/(占位 brief/glossary + 空 research)
   python srt_tools.py normalize in.srt -o out.srt   # 解析+行合并+时间轴校验+重编号(修正阶段用)
-  python srt_tools.py clean in.srt -o out.srt       # normalize + 标点规范化(译文阶段用)
+  python srt_tools.py clean in.srt -o out.srt -l <lang>  # normalize + 标点规范化(译文阶段用; -l 决定标点风格)
   python srt_tools.py --self-test
 """
 import argparse
@@ -21,10 +21,10 @@ TIME_RE = re.compile(
 
 BRACKET_MAP = str.maketrans({"[": "(", "]": ")", "【": "(", "】": ")"})
 ELLIPSIS_RE = re.compile(r"\.{2,}|。{2,}|‥+")
-# 句中直接替换为空格的非成对标点;· 和 ・ 是人名分隔符,不在其列
-MID_PUNCT = set(",，、。．.;；:：~～—–")
-OPEN = set("「『“‘《〈(（")
-CLOSE = set("」』”’》〉)）")
+# 句中直接替换为空格的非成对标点;· 和 ・ 是人名分隔符,不在其列。破折号族含 —–―‒(ｰ 是片假名长音符号,属词内符号,不在其列)
+MID_PUNCT = set(",，、。．.;；:：~～—–―‒")
+OPEN = set("「『“‘《〈(（«‹")
+CLOSE = set("」』”’》〉)）»›")
 TERMINAL_KEEP = set("?？!！…")
 
 
@@ -48,6 +48,18 @@ def _is_cjk(ch):
 
 def _is_punct(ch):
     return unicodedata.category(ch).startswith("P") or ch in "~～"
+
+
+# 稀疏标点风格的 CJK 目标语言;其余(拉丁/西里尔等)走 western 风格,保留句中标点
+CJK_LANGS = {"zh", "ja", "ko"}
+
+
+def _style_for(lang):
+    """根据目标语言决定 clean 的标点风格。缺省视为 cjk,保持向后兼容。"""
+    if not lang:
+        return "cjk"
+    base = lang.lower().replace("_", "-").split("-")[0]
+    return "cjk" if base in CJK_LANGS else "western"
 
 
 def _join_lines(lines):
@@ -75,35 +87,41 @@ def parse(text):
     return entries
 
 
-def clean_text(text):
+def clean_text(text, style="cjk"):
     text = text.translate(BRACKET_MAP)
     text = ELLIPSIS_RE.sub("…", text)
-    chars = list(text)
-    for i, ch in enumerate(chars):
-        if ch in MID_PUNCT:
-            prev = chars[i - 1] if i else ""
-            nxt = chars[i + 1] if i + 1 < len(chars) else ""
-            if ch in ".:" and prev.isdigit() and nxt.isdigit():
-                continue  # 3.5 / 12:30
-            chars[i] = " "
-    text = re.sub(r"\s+", " ", "".join(chars)).strip()
+    if style != "western":
+        # cjk 风格:句中非成对标点转空格;数字/时间里的 . : ． ： 保留(str.isdigit 已覆盖全角数字 ０-９)
+        chars = list(text)
+        for i, ch in enumerate(chars):
+            if ch in MID_PUNCT:
+                prev = chars[i - 1] if i else ""
+                nxt = chars[i + 1] if i + 1 < len(chars) else ""
+                if ch in ".:．：" and prev.isdigit() and nxt.isdigit():
+                    continue  # 3.5 / 12:30 / ３．５ / １２：３０
+                chars[i] = " "
+        text = re.sub(r"\s+", " ", "".join(chars)).strip()
+    # 前导标点剥离(开引号/开括号除外)
     while text and _is_punct(text[0]) and text[0] not in OPEN:
         text = text[1:].lstrip()
-    while text and _is_punct(text[-1]) and text[-1] not in TERMINAL_KEEP and text[-1] not in CLOSE:
+    # 尾标点剥离,仅保留句末允许的标点;western 风格额外保留句号 .
+    terminal = TERMINAL_KEEP if style != "western" else TERMINAL_KEEP | {"."}
+    while text and _is_punct(text[-1]) and text[-1] not in terminal and text[-1] not in CLOSE:
         text = text[:-1].rstrip()
     return text
 
 
-def process(text, mode):
+def process(text, mode, lang=None):
     entries = parse(text)
     if not entries:
         sys.exit("错误: 未解析到任何字幕条目")
+    style = "cjk" if mode != "clean" else _style_for(lang)
     entries.sort(key=lambda e: e["start"])
     for e in entries:
         if e["end"] < e["start"]:
             e["start"], e["end"] = e["end"], e["start"]
         if mode == "clean":
-            e["text"] = clean_text(e["text"])
+            e["text"] = clean_text(e["text"], style)
     return [e for e in entries if e["text"]]
 
 
@@ -216,7 +234,11 @@ def self_test():
     assert clean_text("[笑]真的吗?") == "(笑)真的吗?"
     assert clean_text("Wait... what.") == "Wait… what"
     assert clean_text("现在是3.5版本,时间12:30。") == "现在是3.5版本 时间12:30"
+    assert clean_text("现在是３．５版本,时间１２：３０。") == "现在是３．５版本 时间１２：３０"  # 全角数字/时间保护
+    assert clean_text("Hello, world. This is nice.", "western") == "Hello, world. This is nice."  # western 保留句中标点
     assert clean_text("克里斯·埃文斯说:「没问题」") == "克里斯·埃文斯说 「没问题」"
+    assert clean_text("«Bonjour»", "western") == "«Bonjour»"  # 书名/引语引号不剥
+    assert clean_text("好的―行") == "好的 行"  # 破折号变体 ― ‒ 也转空格
     assert clean_text("嗯。。。") == "嗯…"
     sample = "2\n00:00:03,500 --> 00:00:02,000\nsecond\n\n1\n00:00:01,000 --> 00:00:02,000\n第一\n行\n"
     es = process(sample, "normalize")
@@ -231,6 +253,7 @@ def main():
     ap.add_argument("mode", choices=["init", "normalize", "clean"], nargs="?")
     ap.add_argument("input", nargs="?")
     ap.add_argument("-o", "--output")
+    ap.add_argument("-l", "--lang", help="目标语言(ISO 639-1,如 zh/ja/en)。决定 clean 的标点风格:cjk=逗号转空格,其余=保留句中标点")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:
@@ -239,7 +262,7 @@ def main():
         ap.error("需要 mode 和 input 参数")
     if args.mode == "init":
         return init_workspace(args.input)
-    entries = process(Path(args.input).read_text(encoding="utf-8-sig"), args.mode)
+    entries = process(Path(args.input).read_text(encoding="utf-8-sig"), args.mode, lang=args.lang)
     out = args.output or args.input
     Path(out).write_text(serialize(entries), encoding="utf-8", newline="\n")
     print(f"OK: {len(entries)} entries -> {out}")  # ponytail: ASCII 输出,避开 Windows 控制台编码问题

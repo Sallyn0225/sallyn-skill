@@ -86,7 +86,7 @@ python <skill目录>/scripts/srt_tools.py normalize <stem>/<stem>_fix.srt
 最终(单代理或分块拼接后)运行:
 
 ```
-python <skill目录>/scripts/srt_tools.py clean <stem>/<stem>_<lang>.srt
+python <skill目录>/scripts/srt_tools.py clean -l <lang> <stem>/<stem>_<lang>.srt
 ```
 
 完成标准:clean 输出 OK;条目数与 `_fix.srt` 一致(clean 删掉译后为空的条目除外,数量差需能说明原因);分块时各块编号无重叠无遗漏。
@@ -96,8 +96,10 @@ python <skill目录>/scripts/srt_tools.py clean <stem>/<stem>_<lang>.srt
 派发一个审查子代理,给它:`<stem>/<stem>_fix.srt`(原文基准)、`<stem>/<stem>_<lang>.srt`(待审译文),并要求先 Read 规范、`_context/brief.md`、`_context/glossary.md`。任务:逐条对照原文与译文,检出并直接修正漏译、错译、术语不一致、不符合规范的条目,写出 `<stem>/<stem>_<lang>_fix.srt` 后再跑一遍 `clean`,回报修正清单(条目号+改动原因)。
 
 ```
-python <skill目录>/scripts/srt_tools.py clean <stem>/<stem>_<lang>_fix.srt
+python <skill目录>/scripts/srt_tools.py clean -l <lang> <stem>/<stem>_<lang>_fix.srt
 ```
+
+> `-l <lang>`(ISO 639-1)决定 clean 的标点风格:zh/ja/ko 走 cjk 风格(句中非成对标点转空格、句尾不留句号);其余拉丁/西里尔等走 western 风格(保留句中标点与句尾句号)。缺省为 cjk。
 
 完成标准:子代理回报"逐条核对完成",附修正清单(可为空)。
 
