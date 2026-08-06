@@ -99,7 +99,7 @@ python <skill目录>/scripts/srt_tools.py clean -l <lang> <stem>/<stem>_<lang>.s
 python <skill目录>/scripts/srt_tools.py clean -l <lang> <stem>/<stem>_<lang>_fix.srt
 ```
 
-> `-l <lang>`(ISO 639-1)决定 clean 的标点风格:zh/ja/ko 走 cjk 风格(句中非成对标点转空格、句尾不留句号);其余拉丁/西里尔等走 western 风格(保留句中标点与句尾句号)。缺省为 cjk。
+> `-l <lang>`(ISO 639-1)决定 clean 的标点风格:zh/ja/ko 走 cjk 风格(句中非成对标点转空格、句尾不留句号);其余拉丁/西里尔等走 western 风格(保留 ASCII 标点与破折号族、句尾留句号)。western 假定译文标点已拉丁化,仅额外清理残留的 CJK 全角标点(如 `，、。；：～` 转空格),不做全角→半角全面规范化。缺省为 cjk。
 
 完成标准:子代理回报"逐条核对完成",附修正清单(可为空)。
 

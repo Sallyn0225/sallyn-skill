@@ -23,8 +23,10 @@ BRACKET_MAP = str.maketrans({"[": "(", "]": ")", "【": "(", "】": ")"})
 ELLIPSIS_RE = re.compile(r"\.{2,}|。{2,}|‥+")
 # 句中直接替换为空格的非成对标点;· 和 ・ 是人名分隔符,不在其列。破折号族含 —–―‒(ｰ 是片假名长音符号,属词内符号,不在其列)
 MID_PUNCT = set(",，、。．.;；:：~～—–―‒")
-OPEN = set("「『“‘《〈(（«‹")
-CLOSE = set("」』”’》〉)）»›")
+# CJK 全角标点子集:western 风格保留 ASCII 标点与破折号族,但仍把残留的 CJK 全角标点转空格(译文不该出现这些)
+CJK_MID_PUNCT = set("，、。．；：～")
+OPEN = set('「『“‘《〈(（«‹"')
+CLOSE = set('」』”’》〉)）»›"')
 TERMINAL_KEEP = set("?？!！…")
 
 
@@ -100,7 +102,20 @@ def clean_text(text, style="cjk"):
                 if ch in ".:．：" and prev.isdigit() and nxt.isdigit():
                     continue  # 3.5 / 12:30 / ３．５ / １２：３０
                 chars[i] = " "
-        text = re.sub(r"\s+", " ", "".join(chars)).strip()
+        text = "".join(chars)
+    else:
+        # western 风格:保留 ASCII 标点与破折号族,但仍把残留的 CJK 全角标点转空格(译文不该出现这些)
+        chars = list(text)
+        for i, ch in enumerate(chars):
+            if ch in CJK_MID_PUNCT:
+                prev = chars[i - 1] if i else ""
+                nxt = chars[i + 1] if i + 1 < len(chars) else ""
+                if ch in "．：" and prev.isdigit() and nxt.isdigit():
+                    continue  # ３．５ / １２：３０
+                chars[i] = " "
+        text = "".join(chars)
+    # 统一空白规范化(两种风格都需要,western 也要 collapse 首尾/多空格/制表符)
+    text = re.sub(r"\s+", " ", text).strip()
     # 前导标点剥离(开引号/开括号除外)
     while text and _is_punct(text[0]) and text[0] not in OPEN:
         text = text[1:].lstrip()
@@ -115,7 +130,7 @@ def process(text, mode, lang=None):
     entries = parse(text)
     if not entries:
         sys.exit("错误: 未解析到任何字幕条目")
-    style = "cjk" if mode != "clean" else _style_for(lang)
+    style = _style_for(lang)  # clean 模式用;normalize 不调用 clean_text,style 不影响
     entries.sort(key=lambda e: e["start"])
     for e in entries:
         if e["end"] < e["start"]:
@@ -236,15 +251,31 @@ def self_test():
     assert clean_text("现在是3.5版本,时间12:30。") == "现在是3.5版本 时间12:30"
     assert clean_text("现在是３．５版本,时间１２：３０。") == "现在是３．５版本 时间１２：３０"  # 全角数字/时间保护
     assert clean_text("Hello, world. This is nice.", "western") == "Hello, world. This is nice."  # western 保留句中标点
+    assert clean_text("  Hello,   world.  ", "western") == "Hello, world."  # western 也规范化首尾/多空格(句尾 . 保留)
+    assert clean_text("a\tb", "western") == "a b"  # western 制表符转空格
+    assert clean_text("\"Hello\"", "western") == '"Hello"'  # ASCII 直引号不剥
+    assert clean_text('"你好"') == '"你好"'  # cjk 下 ASCII 直引号同样不剥
     assert clean_text("克里斯·埃文斯说:「没问题」") == "克里斯·埃文斯说 「没问题」"
     assert clean_text("«Bonjour»", "western") == "«Bonjour»"  # 书名/引语引号不剥
     assert clean_text("好的―行") == "好的 行"  # 破折号变体 ― ‒ 也转空格
+    # western 风格下残留的 CJK 全角标点应被清理(转空格),但 ASCII 标点/破折号族保留
+    assert clean_text("Hello，world。", "western") == "Hello world"  # 全角逗号转空格、全角句号尾剥
+    assert clean_text("Hello—world", "western") == "Hello—world"  # 破折号族保留
+    assert clean_text("现在是３．５版本，时间１２：３０。", "western") == "现在是３．５版本 时间１２：３０"  # western 下全角数字仍保护
     assert clean_text("嗯。。。") == "嗯…"
     sample = "2\n00:00:03,500 --> 00:00:02,000\nsecond\n\n1\n00:00:01,000 --> 00:00:02,000\n第一\n行\n"
     es = process(sample, "normalize")
     assert [e["text"] for e in es] == ["第一行", "second"]
     assert es[1]["start"] == 2000 and es[1]["end"] == 3500  # 起止倒置已交换
     assert serialize(es).startswith("1\n00:00:01,000 --> 00:00:02,000\n第一行\n")
+    # 端到端:-l 决定 clean 标点风格(en -> western,保留句尾句号)
+    en_sample = "1\n00:00:01,000 --> 00:00:02,000\n  Hello,   world.  \n"
+    en_es = process(en_sample, "clean", lang="en")
+    assert [e["text"] for e in en_es] == ["Hello, world."]
+    # 端到端:-l zh -> cjk(句中标点转空格、句尾句号剥)
+    zh_sample = "1\n00:00:01,000 --> 00:00:02,000\n你好，世界。\n"
+    zh_es = process(zh_sample, "clean", lang="zh")
+    assert [e["text"] for e in zh_es] == ["你好 世界"]
     print("self-test OK")
 
 
