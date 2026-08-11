@@ -18,6 +18,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`amana-perspective`](./skills/amana-perspective) | `roleplay`, `shinycolors`, `amana`, `idolmaster` | 以《偶像大师 闪耀色彩》大崎甘奈的视角进行角色扮演对话,覆盖日常聊天、陪伴、安慰与深度追问场景。 |
 | [`mayuzumi-fuyuko-perspective`](./skills/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | 以黛冬優子的思维框架与表达方式回应,适合冬優子视角的角色扮演、价值观讨论与陪伴对话。 |
 | [`kogane-perspective`](./skills/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | 以月岡恋鐘的思维框架与恋鐘弁表达方式回应,适合恋钟视角的角色扮演、团队困境分析、自我怀疑陪伴与梦想坚持讨论。 |
+| [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花（七草にちか）的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
 
 ## Install
 
