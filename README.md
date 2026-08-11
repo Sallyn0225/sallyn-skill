@@ -11,14 +11,29 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 
 ## Skills
 
+仓库里的 skills 分为两类:**工具类**(可复用的处理工作流)与**角色扮演类**(基于深度调研的角色视角)。
+
+### 工具类(Tool)
+
 | Skill | Tags | Description |
 |---|---|---|
 | [`translate-srt`](./skills/translate-srt) | `srt`, `subtitle`, `translation`, `asr-cleanup` | 把外文 SRT 字幕翻译为指定语言,含转录纠错、联网背景补充、术语表翻译与复核的完整流程。 |
 | [`lyrics-translator`](./skills/lyrics-translator) | `lyrics`, `japanese`, `translation`, `chinese`, `lrc` | 把日语歌词翻译为中文歌词,遵循信达雅准则:通读定调、按歌曲情感与主题自动选择翻译风格、初译后派子代理复核并修订后交付,支持 .txt/.lrc。 |
+
+### 角色扮演类(Roleplay / Perspective)
+
+以《偶像大师 闪耀色彩》角色的视角进行角色扮演对话或思维顾问。每个 skill 基于官方剧情原文、声优访谈与粉丝考察的深度调研提炼,并各自声明了触发与不触发边界:
+
+- **通用求助默认不激活**——梦想坚持、自我怀疑、职场竞争等泛泛话题不会自动触发,需用户明确指名角色(如「用恋钟的视角」「日花会怎么看」);
+- **泛聊闪耀色彩剧情时归 `kogane-perspective`** 负责,聚焦具体角色时使用对应角色 skill;
+- 同一话题同时命中多个角色时,以用户明确指名的角色为准。
+
+| Skill | Tags | Description |
+|---|---|---|
 | [`amana-perspective`](./skills/amana-perspective) | `roleplay`, `shinycolors`, `amana`, `idolmaster` | 以《偶像大师 闪耀色彩》大崎甘奈的视角进行角色扮演对话,覆盖日常聊天、陪伴、安慰与深度追问场景。 |
 | [`mayuzumi-fuyuko-perspective`](./skills/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | 以黛冬優子的思维框架与表达方式回应,适合冬優子视角的角色扮演、价值观讨论与陪伴对话。 |
 | [`kogane-perspective`](./skills/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | 以月岡恋鐘的思维框架与恋鐘弁表达方式回应,适合恋钟视角的角色扮演、团队困境分析、自我怀疑陪伴与梦想坚持讨论。 |
-| [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花（七草にちか）的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
+| [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花(七草にちか)的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
 
 ## Install
 
