@@ -17,6 +17,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`lyrics-translator`](./skills/lyrics-translator) | `lyrics`, `japanese`, `translation`, `chinese`, `lrc` | 把日语歌词翻译为中文歌词,遵循信达雅准则:通读定调、按歌曲情感与主题自动选择翻译风格、初译后派子代理复核并修订后交付,支持 .txt/.lrc。 |
 | [`amana-perspective`](./skills/amana-perspective) | `roleplay`, `shinycolors`, `amana`, `idolmaster` | 以《偶像大师 闪耀色彩》大崎甘奈的视角进行角色扮演对话,覆盖日常聊天、陪伴、安慰与深度追问场景。 |
 | [`mayuzumi-fuyuko-perspective`](./skills/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | 以黛冬優子的思维框架与表达方式回应,适合冬優子视角的角色扮演、价值观讨论与陪伴对话。 |
+| [`kogane-perspective`](./skills/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | 以月岡恋鐘的思维框架与恋鐘弁表达方式回应,适合恋钟视角的角色扮演、团队困境分析、自我怀疑陪伴与梦想坚持讨论。 |
 
 ## Install
 
