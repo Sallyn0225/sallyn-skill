@@ -1,0 +1,23 @@
+{
+  "base_url": "https://api.fish.audio",
+  "api_key": "YOUR_FISH_AUDIO_API_KEY",
+  "model": "s2.1-pro",
+  "reference_id": "",
+  "format": "mp3",
+  "mp3_bitrate": 128,
+  "sample_rate": 44100,
+  "latency": "normal",
+  "chunk_length": 300,
+  "normalize": true,
+  "speed": 1.0,
+  "volume": 0,
+  "normalize_loudness": true,
+  "temperature": 0.7,
+  "top_p": 0.7,
+  "max_new_tokens": 1024,
+  "repetition_penalty": 1.2,
+  "min_chunk_length": 50,
+  "condition_on_previous_chunks": true,
+  "early_stop_threshold": 1.0,
+  "features": []
+}
