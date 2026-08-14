@@ -19,6 +19,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 |---|---|---|
 | [`translate-srt`](./skills/translate-srt) | `srt`, `subtitle`, `translation`, `asr-cleanup` | 把外文 SRT 字幕翻译为指定语言,含转录纠错、联网背景补充、术语表翻译与复核的完整流程。 |
 | [`lyrics-translator`](./skills/lyrics-translator) | `lyrics`, `japanese`, `translation`, `chinese`, `lrc` | 把日语歌词翻译为中文歌词,遵循信达雅准则:通读定调、按歌曲情感与主题自动选择翻译风格、初译后派子代理复核并修订后交付,支持 .txt/.lrc。 |
+| [`openai-image`](./skills/openai-image) | `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible` | 通过 OpenAI 兼容 API 文生图与编辑图片,支持自定义 base_url/api_key(官方或任意第三方服务),零依赖 Python 脚本,支持多图、mask 遮罩、尺寸/质量/格式控制。 |
 
 ### 角色扮演类(Roleplay / Perspective)
 
@@ -110,4 +111,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `roleplay`, `shinycolors`, `idolmaster`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`

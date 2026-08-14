@@ -26,5 +26,8 @@ desktop.ini
 *_zh.srt
 *_fixed.srt
 
+# openai-image: 用户密钥配置(由 config.example.json 复制生成,严禁入仓)
+skills/openai-image/config.json
+
 # skill-creator 测试工作区(评测产物,不入仓)
 skills/*-workspace/
