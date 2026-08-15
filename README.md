@@ -28,7 +28,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 
 - **通用求助默认不激活**——梦想坚持、自我怀疑、职场竞争等泛泛话题不会自动触发,需用户明确指名角色(如「用恋钟的视角」「日花会怎么看」);
 - **泛聊闪耀色彩剧情时归 `kogane-perspective`** 负责,聚焦具体角色时使用对应角色 skill;
-- **泛聊本家 765PRO 剧情时归 `miki-perspective`** 负责;
+- **泛聊本家 765PRO 剧情时归 `miki-perspective` / `chihaya-perspective`** 负责;
 - 同一话题同时命中多个角色时,以用户明确指名的角色为准。
 
 | Skill | Tags | Description |
@@ -38,6 +38,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`kogane-perspective`](./skills/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | 以月岡恋鐘的思维框架与恋鐘弁表达方式回应,适合恋钟视角的角色扮演、团队困境分析、自我怀疑陪伴与梦想坚持讨论。 |
 | [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花(七草にちか)的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
 | [`miki-perspective`](./skills/miki-perspective) | `roleplay`, `idolmaster`, `765pro`, `miki` | 以星井美希(ほしい みき)的思维框架与表达DNA回应,适合美希视角的角色扮演、选择判断(ドキドキ测试)、自我认知、恋爱观与天然呆慵懒系表达模仿。 |
+| [`chihaya-perspective`](./skills/chihaya-perspective) | `roleplay`, `idolmaster`, `765pro`, `chihaya` | 以如月千早(きさらぎ ちはや)的思维框架与表达DNA回应,适合千早视角的角色扮演、唱歌/完美主义、努力与天赋、约定与孤独、成长弧线讨论。 |
 
 ## Install
 
@@ -112,4 +113,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `765pro`, `chihaya`
