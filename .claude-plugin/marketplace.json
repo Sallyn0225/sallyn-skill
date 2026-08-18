@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/.claude-plugin/marketplace.schema.json",
+  "metadata": {
+    "name": "sallyn-skill",
+    "description": "sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合。"
+  },
+  "plugins": [
+    {
+      "name": "tool",
+      "description": "工具类:可复用的处理工作流。",
+      "skills": [
+        "./skills/translate-srt",
+        "./skills/lyrics-translator",
+        "./skills/openai-image",
+        "./skills/fish-tts"
+      ]
+    },
+    {
+      "name": "roleplay",
+      "description": "角色扮演类:基于深度调研的角色视角。",
+      "skills": [
+        "./skills/amana-perspective",
+        "./skills/mayuzumi-fuyuko-perspective",
+        "./skills/kogane-perspective",
+        "./skills/nichika-perspective",
+        "./skills/miki-perspective",
+        "./skills/chihaya-perspective",
+        "./skills/haruka-perspective"
+      ]
+    }
+  ]
+}

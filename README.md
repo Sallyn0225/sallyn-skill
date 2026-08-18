@@ -43,11 +43,13 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 
 ## Install
 
-列出仓库内可安装的 skills:
+列出仓库内可安装的 skills(按工具类 / 角色扮演类分组展示):
 
 ```bash
 npx skills add Sallyn0225/sallyn-skill --list
 ```
+
+分组的依据是仓库根目录的 [`./.claude-plugin/marketplace.json`](./.claude-plugin/marketplace.json):它声明了 `tool` 与 `roleplay` 两个 plugin,`skills` CLI(`--list`)会据此把每个 skill 归到对应分组下展示。新增 skill 时,记得把它登记到对应 plugin 的 `skills` 数组里,否则它会落在未分组的 `General` 下。
 
 安装指定 skill:
 
@@ -78,6 +80,8 @@ npx skills add Sallyn0225/sallyn-skill --skill translate-srt --agent claude-code
 
 ```text
 sallyn-skill/
+├── .claude-plugin/
+│   └── marketplace.json   # skills.sh 分组清单:声明 tool / roleplay 两个 plugin
 ├── README.md
 ├── LICENSE
 └── skills/
@@ -88,6 +92,8 @@ sallyn-skill/
 ```
 
 每个 skill 都是一个独立目录,并通过 `SKILL.md` 顶部的 YAML frontmatter 声明 `name` 和 `description`。`skills` CLI 会读取这些字段来展示、筛选和安装 skill。
+
+仓库根目录的 `.claude-plugin/marketplace.json` 是 [Claude Code 插件市场清单](https://docs.claude.com/en/docs/claude-code/plugins-marketplaces)格式,这里只用它来给 `skills add --list` 提供分组信息——它把 `skills/` 下的各个 skill 按 `tool` / `roleplay` 两个 plugin 归类。它不影响单 skill 安装(`--skill <name>`)或全量安装(`--all`),只决定 `--list` 的展示分组。
 
 ## Local Development
 
