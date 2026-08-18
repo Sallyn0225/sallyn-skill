@@ -9,6 +9,8 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 > [!NOTE]
 > 这是 sallyn 的个人沉淀仓库,不是某个 agent 的专用扩展包。只要你的 agent 支持 `skills` CLI 或兼容 `SKILL.md` 目录规范,就可以使用这里的 skills。
 
+> 想新增 / 维护 skill?看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
 ## Skills
 
 仓库里的 skills 分为两类:**工具类**(可复用的处理工作流)与**角色扮演类**(基于深度调研的角色视角)。
