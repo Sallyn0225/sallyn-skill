@@ -1,6 +1,6 @@
 ---
 name: fish-tts
-description: 使用 Fish Audio API 把文字转成语音（TTS）：朗读文本、生成配音/旁白、制作有声内容、把文章/台词/字幕/脚本转成 mp3/wav/pcm/opus 音频文件。当用户要求"文字转语音"、"语音合成"、"朗读这段话"、"把这段文字变成音频/MP3"、"配音"、"AI 语音"、"有声书"或任何需要把文本变成人声文件的需求时，都使用本技能——即使用户没有提到 Fish Audio 或 API。本技能自带零依赖 Python 脚本和 config.json，允许用户配置 API key、TTS 模型（s2.1-pro / s2.1-pro-free / s2-pro / s1）、默认音色（reference_id）以及格式、码率、语速、音量、延迟等全部常用参数。
+description: 使用 Fish Audio API 把文字转成语音（TTS）：朗读文本、生成配音/旁白、制作有声内容、把文章/台词/字幕/脚本转成 mp3/wav/pcm/opus 音频文件。当用户要求"文字转语音"、"语音合成"、"朗读这段话"、"把这段文字变成音频/MP3"、"配音"、"AI 语音"、"有声书"或任何需要把文本变成人声文件的需求时，都使用本技能——即使用户没有提到 Fish Audio 或 API。当用户要求带情绪/带感情/用某种语气朗读、想控制语音情绪（开心、生气、悲伤等）、加笑声/叹气/停顿等效果时也使用本技能。本技能自带零依赖 Python 脚本和 config.json，允许用户配置 API key、TTS 模型（s2.1-pro / s2.1-pro-free / s2-pro / s1）、默认音色（reference_id）以及格式、码率、语速、音量、延迟等全部常用参数；支持在文本中插入情绪与语气标记（S2 系列用 `[方括号]` 自由自然语言、s1 用 `(圆括号)` 英文固定标签）控制语音表现力。
 ---
 
 # Fish Audio 文字转语音
@@ -56,6 +56,40 @@ python scripts/fish_tts.py tts --text "..." --format wav --sample-rate 44100 -o 
 
 长文本直接用 `--text-file`；不要手动分段——服务端按 `chunk_length` 自动切分并保持音色一致。
 
+## 情绪与语气控制
+
+Fish Audio 模型支持 64+ 种情绪表达与语音风格，在**文本里插入标记**即可控制语气、笑声、停顿等，让语音更像真人。脚本把 `--text` 原样发给 API，所以你只需把标记写进文本，无需额外参数。
+
+**关键：不同模型族语法不同，最容易踩坑：**
+
+| 模型族 | 语法 | 标签 | 示例 |
+|---|---|---|---|
+| **S2 系列**（s2.1-pro / s2.1-pro-free / s2-pro） | `[方括号]` | 自由自然语言，中英文皆可、不限于固定标签 | `[happy]`、`[高兴]`、`[very excited]` |
+| **S1**（s1） | `(圆括号)` | 固定英文标签集 | `(happy)`、`(sad)`、`(angry)` |
+
+- 想用中文标签或自由描述（如 `[非常激动]`）→ 用 **S2 系列 + 方括号**。
+- 只有用 s1 时才用圆括号英文标签，且必须用官方固定标签（happy/sad/angry…），**不能用中文 `(高兴)`**（那是错误写法）。
+
+常用示例（S2 方括号）：
+
+```bash
+# 句首放情绪标记，控制整句语气
+python scripts/fish_tts.py tts --text "[happy] 太好了，我们成功了！" -o happy.mp3
+
+# 组合情绪+语气
+python scripts/fish_tts.py tts --text "[angry][shouting] 停下！" -o shout.mp3
+
+# 音效标记后接拟声文字
+python scripts/fish_tts.py tts --text "[excited][laughing] 我们赢了！Ha ha!" -o laugh.mp3
+
+# s1 模型必须用圆括号英文标签
+python scripts/fish_tts.py tts --model s1 --text "今天天气真不错(happy)" -o s1.mp3
+```
+
+放置与最佳实践：句首放情绪标记效果最好；每句一个主情绪；组合不超过 3 个；情绪标记不计 token、不增加延迟。
+
+完整内容——基础情绪 24 种、高级情绪 25 种、语气标记 6 种、音效 11 种、特效、组合/过渡/强度修饰、13 种语言支持、排错与速查表——见 `references/emotions.md`，需要精确选情绪或调试时查阅。
+
 ## 配置（config.json）
 
 由 `config.example.json` 复制而来，位于 skill 根目录。所有字段都可按用户需求修改；`scripts/fish_tts.py config` 查看现状（key 打码）：
@@ -87,7 +121,7 @@ python scripts/fish_tts.py tts --text "..." --format wav --sample-rate 44100 -o 
 ```
 
 - `api_key`：必填。在 fish.audio 后台（API Keys 页面）创建。提醒用户：config.json 含明文密钥，不要提交到版本库。
-- `model`：`s2.1-pro`（推荐，生产质量）、`s2.1-pro-free`（免费测试档）、`s2-pro`（上一代，多说话人）、`s1`（支持 `(情绪)` 括号标签）。模型经请求头发送。
+- `model`：`s2.1-pro`（推荐，生产质量）、`s2.1-pro-free`（免费测试档）、`s2-pro`（上一代，多说话人）、`s1`（上一代，情绪用圆括号英文固定标签）。**S2 系列同样支持情绪控制**，用方括号且接受自由自然语言；模型经请求头发送。详见上方「情绪与语气控制」与 `references/emotions.md`。
 - `reference_id`：默认音色。留空则每次合成必须显式 `--reference-id`（或零样本克隆）。填上后 `tts` 子命令可省略音色参数。
 - `format`：`mp3`（默认）/ `wav`（无损）/ `pcm`（裸采样）/ `opus`（流式高效）。
 - `mp3_bitrate`：64/128/192；`sample_rate`：opus 用 48000，其他一般 44100。
@@ -101,7 +135,7 @@ python scripts/fish_tts.py tts --text "..." --format wav --sample-rate 44100 -o 
 
 | 参数 | 取值 | 说明 |
 |---|---|---|
-| `--model` | s2.1-pro / s2.1-pro-free / s2-pro / s1 | 走请求头；s1 用 `(高兴)` 括号情绪标签 |
+| `--model` | s2.1-pro / s2.1-pro-free / s2-pro / s1 | 走请求头；S2 系列用 `[方括号]` 自由情绪描述、s1 用 `(圆括号)` 英文固定标签 |
 | `--reference-id` | 音色 id（可多次） | 传多次 = 多说话人，文本需 `<\|speaker:0\|>` 标记（仅 S2 系） |
 | `--reference-audio` + `--reference-text` | 音频路径 + 转录文本 | 零样本克隆，需成对、数量一致 |
 | `--format` | mp3 / wav / pcm / opus | 默认取 config（mp3） |
@@ -145,4 +179,4 @@ python scripts/fish_tts.py tts --text "..." --format wav --sample-rate 44100 -o 
 - 合成耗时随文本长度增长（可能 1–2 分钟+），脚本超时 300 秒，勿自行中断重试——429/5xx 已在脚本内自动退避重试。
 - `s2.1-pro-free` 无 TTFA/DPA 保证，适合开发测试；正式交付用 `s2.1-pro`。
 - 零样本克隆的参考音频要干净（无背景音乐/混响）、10–30 秒、转录逐字准确；反复复用同一音色时建议先在 fish.audio 克隆为音色模型，再复用其 reference_id。
-- 多说话人合成仅 S2 系列支持；`s1` 模型请用 `(情绪)` 括号标签控制语气。
+- 多说话人合成仅 S2 系列支持；`s1` 不支持多说话人，情绪用 `(圆括号)` 英文固定标签（如 `(happy)`），**不要用中文 `(高兴)`**。
