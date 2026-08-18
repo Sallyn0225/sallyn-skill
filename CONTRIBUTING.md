@@ -25,16 +25,22 @@ sallyn-skill/
 
 每个 skill 是 `skills/` 下一个独立目录,目录名 = skill 名。`SKILL.md` 是唯一必需文件,其余按需添加。
 
-## 两个分类
+## 分类
 
-仓库里的 skill 分为两类(见 [README.md](./README.md#skills)):
+仓库里的 skill 分为工具类与角色扮演类,后者再按系列分为闪耀色彩与本家 765PRO(见 [README.md](./README.md#skills))。skills.sh 的 `--list` 只支持一级分组,所以「角色扮演类」在 CLI 里拆成两个平级 plugin 展示:
 
 | 分类 | plugin 名(`marketplace.json` 里的值) | `--list` 里显示的分组标题 | 适合什么 |
 |---|---|---|---|
 | 工具类 | `tool` | **Tool** | 可复用的处理工作流:翻译、文生图、TTS 等有明确输入/输出与步骤的「工具」。 |
-| 角色扮演类 | `roleplay` | **Roleplay** | 基于深度调研提炼出的角色思维框架 / 视角,用于角色扮演对话或思维顾问。 |
+| 角色扮演类·闪耀色彩 | `roleplay-shinycolors` | **Roleplay Shinycolors** | 《偶像大师 闪耀色彩》角色的思维框架 / 视角。 |
+| 角色扮演类·本家 765PRO | `roleplay-765pro` | **Roleplay 765pro** | 《偶像大师》本家 765PRO 角色的思维框架 / 视角。 |
 
-**怎么判断新 skill 归哪类?** 看它「是什么」而不是「给谁用」——它是一个**做事的流程**(→ `tool`),还是一套**以某角色视角说话/思考的方式**(→ `roleplay`)。
+**怎么判断新 skill 归哪类?** 看它「是什么」而不是「给谁用」——
+
+- 它是一个**做事的流程** → `tool`。
+- 它是一套**以某角色视角说话/思考的方式** → `roleplay-*`,再按角色所属系列选 `roleplay-shinycolors` 还是 `roleplay-765pro`。新系列(如《偶像大师》的其他分支)出来时,加一个 `roleplay-<系列>` plugin 即可,分组名按 kebab-case → Title Case 自动渲染。
+
+> skills.sh 只支持一级分组,无法在 `Roleplay` 下面再嵌套「闪耀色彩 / 本家」子组。所以这里用 `roleplay-shinycolors` / `roleplay-765pro` 两个**平级** plugin 实现,`--list` 里会显示为两个独立分组头(而非嵌套)。
 
 ## 新增一个 skill(完整步骤)
 
@@ -90,21 +96,25 @@ npx skills add . --list
 {
   "plugins": [
     {
-      "name": "tool",                       // 或 "roleplay"
+      "name": "tool",                       // 工具类
       "skills": [
         "./skills/translate-srt",
         "./skills/lyrics-translator",
         "./skills/my-skill"                  // ← 新增这一行
       ]
+    },
+    {
+      "name": "roleplay-shinycolors",        // 或 "roleplay-765pro"(按角色所属系列)
+      "skills": [ /* ... */ ]
     }
     // ...
   ]
 }
 ```
 
-路径必须以 `./` 开头,指向 skill 目录(不含 `SKILL.md`)。
+路径必须以 `./` 开头,指向 skill 目录(不含 `SKILL.md`)。角色扮演类要按系列选 `roleplay-shinycolors` 或 `roleplay-765pro`,别都往一个里塞。
 
-**为什么要登记?** `skills add --list` 是按 `marketplace.json` 里声明的 plugin 名分组的(`getPluginGroupings` 机制)。没登记的 skill 会被归到未分组的 `General` 下,而不是你期望的 `Tool` / `Roleplay` 分组里。再跑一次 `npx skills add . --list` 确认它落在正确的分组标题下。
+**为什么要登记?** `skills add --list` 是按 `marketplace.json` 里声明的 plugin 名分组的(`getPluginGroupings` 机制)。没登记的 skill 会被归到未分组的 `General` 下,而不是你期望的 `Tool` / `Roleplay Shinycolors` / `Roleplay 765pro` 分组里。再跑一次 `npx skills add . --list` 确认它落在正确的分组标题下。
 
 ### 6. 更新 README
 
@@ -139,7 +149,8 @@ docs(readme): 按工具类/角色扮演类分类展示 skills
 ## 改动 `.claude-plugin/marketplace.json` 时要注意
 
 - 它是 [Claude Code 插件市场清单](https://docs.claude.com/en/docs/claude-code/plugins-marketplaces)格式,这里只用它给 `skills add --list` 提供分组信息。
-- 两个 plugin 的 `name` 分别是 `tool` 和 `roleplay`,会按 kebab-case → Title Case 渲染成 `Tool` / `Roleplay` 分组标题。想改分组名时,改这里的 `name` 即可。
+- 三个 plugin 的 `name` 分别是 `tool`、`roleplay-shinycolors`、`roleplay-765pro`,会按 kebab-case → Title Case 渲染成 `Tool` / `Roleplay Shinycolors` / `Roleplay 765pro` 分组标题。想改分组名时,改这里的 `name` 即可。
+- skills.sh 只支持一级分组,没法在 `Roleplay` 下嵌套子组,所以角色扮演类用 `roleplay-<系列>` 两个平级 plugin 实现子分类。新增系列时加一个 `roleplay-<系列>` plugin。
 - 每条 skill 路径都要以 `./` 开头;路径会被校验是否落在仓库内(`isContainedIn`),写外部的会被忽略。
 - 它**不影响**单 skill 安装(`--skill <name>`)或全量安装(`--all`),只决定 `--list` 的展示分组。
 
