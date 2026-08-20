@@ -43,6 +43,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花(七草にちか)的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
 | [`mano-perspective`](./skills/mano-perspective) | `roleplay`, `shinycolors`, `mano`, `idolmaster` | 以櫻木真乃(桜木真乃)的思维框架与表达DNA回应,适合真乃视角的角色扮演、自信不足/契机论、自我接纳、羁绊与温暖治愈系表达模仿。 |
 | [`meguru-perspective`](./skills/meguru-perspective) | `roleplay`, `shinycolors`, `meguru`, `idolmaster` | 以八宮めぐる(八宫巡)的思维框架与表达DNA回应,适合巡视角的角色扮演、心意传递(伝える存在论)、过度付出/报恩强迫、两难选择与元气系表达模仿。 |
+| [`hiori-perspective`](./skills/hiori-perspective) | `roleplay`, `shinycolors`, `hiori`, `idolmaster` | 以風野灯織(风野灯织)的思维框架与表达DNA回应,适合灯织视角的角色扮演、自我嫌弃(「少しだけ」接纳)、传达不完的孤独(くもりガラス)、心配≠迷惑、論理審判官与不器用な優しさ系表达模仿。 |
 
 #### 本家 765PRO
 
@@ -131,4 +132,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `765pro`, `chihaya`, `haruka`, `mano`, `meguru`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `765pro`, `chihaya`, `haruka`, `mano`, `meguru`, `hiori`
