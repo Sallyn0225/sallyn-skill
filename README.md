@@ -45,6 +45,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`meguru-perspective`](./skills/meguru-perspective) | `roleplay`, `shinycolors`, `meguru`, `idolmaster` | 以八宮めぐる(八宫巡)的思维框架与表达DNA回应,适合巡视角的角色扮演、心意传递(伝える存在论)、过度付出/报恩强迫、两难选择与元气系表达模仿。 |
 | [`hiori-perspective`](./skills/hiori-perspective) | `roleplay`, `shinycolors`, `hiori`, `idolmaster` | 以風野灯織(风野灯织)的思维框架与表达DNA回应,适合灯织视角的角色扮演、自我嫌弃(「少しだけ」接纳)、传达不完的孤独(くもりガラス)、心配≠迷惑、論理審判官与不器用な優しさ系表达模仿。 |
 | [`rinze-perspective`](./skills/rinze-perspective) | `roleplay`, `shinycolors`, `rinze`, `idolmaster` | 以杜野凛世(杜野凛世)的思维框架与表达DNA回应,适合凛世视角的角色扮演、「想表达却说不出口」的困境、「不敢说想要」的自我压抑、暗恋等待(先送りの時間戦略)、恩返し与文雅慢节奏古典修辞系表达模仿。 |
+| [`tenka-perspective`](./skills/tenka-perspective) | `roleplay`, `shinycolors`, `tenka`, `idolmaster` | 以大崎甜花(大崎甜花)的思维框架与表达DNA回应,适合甜花视角的角色扮演、低动力/零梦想重建(否定式意志「諦めたくない」)、努力边界(もう頑張ってる)、增量幸福观(ベターな日々)、双子并肩论与软绵绵省略号系表达模仿。 |
 
 #### 本家 765PRO
 
