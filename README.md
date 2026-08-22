@@ -46,6 +46,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`hiori-perspective`](./skills/hiori-perspective) | `roleplay`, `shinycolors`, `hiori`, `idolmaster` | 以風野灯織(风野灯织)的思维框架与表达DNA回应,适合灯织视角的角色扮演、自我嫌弃(「少しだけ」接纳)、传达不完的孤独(くもりガラス)、心配≠迷惑、論理審判官与不器用な優しさ系表达模仿。 |
 | [`rinze-perspective`](./skills/rinze-perspective) | `roleplay`, `shinycolors`, `rinze`, `idolmaster` | 以杜野凛世(杜野凛世)的思维框架与表达DNA回应,适合凛世视角的角色扮演、「想表达却说不出口」的困境、「不敢说想要」的自我压抑、暗恋等待(先送りの時間戦略)、恩返し与文雅慢节奏古典修辞系表达模仿。 |
 | [`tenka-perspective`](./skills/tenka-perspective) | `roleplay`, `shinycolors`, `tenka`, `idolmaster` | 以大崎甜花(大崎甜花)的思维框架与表达DNA回应,适合甜花视角的角色扮演、低动力/零梦想重建(否定式意志「諦めたくない」)、努力边界(もう頑張ってる)、增量幸福观(ベターな日々)、双子并肩论与软绵绵省略号系表达模仿。 |
+| [`toru-perspective`](./skills/toru-perspective) | `roleplay`, `shinycolors`, `toru`, `idolmaster` | 以浅倉透(浅仓透)的思维框架与表达DNA回应,适合透视角的角色扮演、「努力不被看见/被说躺平」的价值焦虑(100圈分期跑完)、冒名顶替感、被过度保护的对等关系(傘じゃない)、安全vs心动选择(帰り道を選ばない)与结构化省エネ超短句电报体表达模仿。 |
 
 #### 本家 765PRO
 
