@@ -85,6 +85,13 @@ def require_api_key(api_key, config_path):
         )
 
 
+def enforce_transparent_format(args):
+    """透明背景只支持 png/webp；jpeg 会被 API 拒绝，自动改用 png 并提示。"""
+    if args.background == "transparent" and args.output_format == "jpeg":
+        eprint("[warn] 透明背景（--background transparent）不支持 jpeg 输出，已自动改用 png（可用 webp）。")
+        args.output_format = "png"
+
+
 def mask_key(key):
     if not key:
         return "(未设置)"
@@ -296,6 +303,7 @@ def add_prompt_args(parser):
 def cmd_generate(args):
     base_url, api_key, model = resolve_settings(args)
     require_api_key(api_key, args.config)
+    enforce_transparent_format(args)
 
     prompt = read_prompt(args)
     if not prompt:
@@ -331,6 +339,7 @@ def cmd_generate(args):
 def cmd_edit(args):
     base_url, api_key, model = resolve_settings(args)
     require_api_key(api_key, args.config)
+    enforce_transparent_format(args)
 
     prompt = read_prompt(args)
     if not prompt:

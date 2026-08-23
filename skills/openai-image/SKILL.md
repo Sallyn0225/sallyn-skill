@@ -41,10 +41,16 @@ python scripts/openai_image.py edit --image photo.jpg --prompt "把背景换成�
 python scripts/openai_image.py edit --image a.png --image b.png --mask mask.png \
   --prompt "保留 a 的主体，背景换成 b 的沙滩场景" -o out.png
 
+# 透明背景（贴纸/图标/商品图，gpt-image-2 起支持 preview）
+python scripts/openai_image.py generate --prompt "一个草莓图标，主体独立、完全透明背景，不要任何阴影和场景" \
+  --background transparent -o sticker.png
+
 # 常用参数
 python scripts/openai_image.py generate --prompt "..." --size 1024x1536 --quality high \
   --n 2 --output-format jpeg -o ./out
 ```
+
+> 透明背景必须搭配 `png` / `webp` 输出（`--output-format jpeg` 不支持透明，脚本会自动改用 png 并提示）。
 
 提示词很长时用 `--prompt-file prompt.txt` 从 UTF-8 文本文件读取。
 
@@ -63,6 +69,7 @@ python scripts/openai_image.py generate --prompt "..." --size 1024x1536 --qualit
 - `base_url`：服务根地址。默认 OpenAI 官方；第三方服务填其兼容端点（通常以 `/v1` 结尾）。
 - `api_key`：密钥。提醒用户：`config.json` 含密钥、不要提交到版本库（本目录通常在 .gitignore 中）。
 - `model`：默认模型。可选 `gpt-image-1`（默认，生图+编辑）、`gpt-image-1-mini`（更快更便宜）、
+  `gpt-image-1.5`、`gpt-image-2`（最新旗舰，任意分辨率）、`gpt-image-2-2026-04-21`（固定快照）、
   `dall-e-3`（高质量但仅 `n=1`）、`dall-e-2`（精确 mask 编辑）等，取决于目标服务支持的模型。
 - 命令行 `--base-url` / `--api-key` / `--model` 可临时覆盖配置，适合多账号切换。
 
@@ -74,8 +81,8 @@ python scripts/openai_image.py generate --prompt "..." --size 1024x1536 --qualit
 |---|---|---|
 | `--size` | `1024x1024`、`1024x1536`、`1536x1024`、`2048x2048`、`auto`… | gpt-image 系列；dall-e-3 用 `1792x1024`/`1024x1792`，dall-e-2 最大 `1024x1024` |
 | `--quality` | `low` / `medium` / `high` / `auto` | 草稿→成品；`low` 快而便宜 |
-| `--output-format` | `png` / `jpeg` / `webp` | 默认 png；jpeg 最快 |
-| `--background` | `transparent` / `opaque` / `auto` | 透明背景（gpt-image-2 不支持 transparent） |
+| `--output-format` | `png` / `jpeg` / `webp` | 默认 png；jpeg 最快；**透明背景只能用 png/webp** |
+| `--background` | `transparent` / `opaque` / `auto` | 背景控制。gpt-image 系列支持；`transparent` 在 gpt-image-2 及 gpt-image-2-2026-04-21 上为 preview（2026-08-20 起） |
 | `--moderation` | `auto` / `low` | 审核强度 |
 | `--n` | 1–10 | 生成张数（dall-e-3 固定 1） |
 | `--response-format` | `b64_json` / `url` | 仅 dall-e 系列；脚本对 dall-e 自动加 `b64_json` |
@@ -91,6 +98,10 @@ python scripts/openai_image.py generate --prompt "..." --size 1024x1536 --qualit
 
 - 具体 > 抽象：描述主体、动作、环境、光线、构图、风格、色调、镜头（如 "广角/特写"）、媒介（如 "水彩/3D 渲染/胶片摄影"）。
 - 局部编辑要明确："只改 X，保持其他部分完全不变"。
+- **透明背景（`--background transparent`）**：提示词优先级高于 background 参数，务必在提示词里明确要求
+  "主体独立、完全透明背景（fully transparent background）"，并**避免**描述场景、纯色背景、棋盘格、阴影等内容，
+  否则模型可能生成不透明背景；编辑场景下可重复强调"保留透明背景"以防后续步骤补上新背景。
+  适合贴纸、图标、商品图、PPT/海报素材等需要后期叠加的场景。
 - dall-e-3 会输出 `revised_prompt`（模型改写后的提示词），结果不理想时可参考它以改进措辞。
 - 生图请求最长可能近 2 分钟，脚本超时为 300 秒，勿自行中断。
 
@@ -104,6 +115,7 @@ python scripts/openai_image.py generate --prompt "..." --size 1024x1536 --qualit
 | 429 / 5xx | 脚本自动指数退避重试 3 次；仍失败 → 稍后再试 |
 | `moderation_blocked` | 内容审核拦截 → 改写提示词，不要原样重试 |
 | 第三方服务参数报错 | 该服务只支持参数子集 → 去掉多余参数（如 background/moderation）重试 |
+| `transparent` + `jpeg` 报错 | 透明背景只支持 png/webp → 改用 `--output-format png`（脚本已自动处理，若仍报错检查是否手动传了 jpeg） |
 
 ## 注意事项
 
