@@ -11,36 +11,44 @@
 ```text
 sallyn-skill/
 ├── .claude-plugin/
-│   └── marketplace.json   # skills.sh 分组清单:声明 tool / roleplay 两个 plugin
-├── CONTRIBUTING.md        # 本文件
-├── README.md
+│   └── marketplace.json       # skills.sh 分组清单:声明 tool / roleplay-shinycolors / roleplay-765pro 三个 plugin
+├── CONTRIBUTING.md            # 本文件
+├── README.md                  # 仓库主页与精选导航
 ├── LICENSE
 └── skills/
-    └── <skill-name>/
-        ├── SKILL.md       # 必需:skill 元数据与使用说明
-        ├── scripts/        # 可选:skill 用到的辅助脚本
-        ├── references/    # 可选:skill 引用的参考文档
-        └── evals/          # 可选:评测 prompt 或 fixtures
+    ├── <tool-skill-name>/     # 工具类 skill (平铺在 skills/ 下)
+    │   ├── SKILL.md           # 必需:skill 元数据与使用说明
+    │   ├── scripts/            # 可选:skill 用到的辅助脚本
+    │   ├── references/        # 可选:skill 引用的参考文档
+    │   └── evals/              # 可选:评测 prompt 或 fixtures
+    ├── shinycolors/           # 🌟 闪耀色彩系列角色视角
+    │   ├── README.md          # 闪耀色彩 28 位全角色索引与组合导航
+    │   └── <idol>-perspective/
+    │       └── SKILL.md
+    └── 765pro/                # 👑 本家 765PRO 系列角色视角
+        ├── README.md          # 765PRO 全角色索引
+        └── <idol>-perspective/
+            └── SKILL.md
 ```
 
-每个 skill 是 `skills/` 下一个独立目录,目录名 = skill 名。`SKILL.md` 是唯一必需文件,其余按需添加。
+每个 skill 是一个独立目录,目录名 = skill 名。`SKILL.md` 是唯一必需文件,其余按需添加。
 
 ## 分类
 
 仓库里的 skill 分为工具类与角色扮演类,后者再按系列分为闪耀色彩与本家 765PRO(见 [README.md](./README.md#skills))。skills.sh 的 `--list` 只支持一级分组,所以「角色扮演类」在 CLI 里拆成两个平级 plugin 展示:
 
-| 分类 | plugin 名(`marketplace.json` 里的值) | `--list` 里显示的分组标题 | 适合什么 |
-|---|---|---|---|
-| 工具类 | `tool` | **Tool** | 可复用的处理工作流:翻译、文生图、TTS 等有明确输入/输出与步骤的「工具」。 |
-| 角色扮演类·闪耀色彩 | `roleplay-shinycolors` | **Roleplay Shinycolors** | 《偶像大师 闪耀色彩》角色的思维框架 / 视角。 |
-| 角色扮演类·本家 765PRO | `roleplay-765pro` | **Roleplay 765pro** | 《偶像大师》本家 765PRO 角色的思维框架 / 视角。 |
+| 分类 | 存放目录 | plugin 名(`marketplace.json` 里的值) | `--list` 里显示的分组标题 | 适合什么 |
+|---|---|---|---|---|
+| 工具类 | `skills/<skill-name>/` | `tool` | **Tool** | 可复用的处理工作流:翻译、文生图、TTS 等有明确输入/输出与步骤的「工具」。 |
+| 角色扮演类·闪耀色彩 | `skills/shinycolors/<idol>-perspective/` | `roleplay-shinycolors` | **Roleplay Shinycolors** | 《偶像大师 闪耀色彩》角色的思维框架 / 视角。 |
+| 角色扮演类·本家 765PRO | `skills/765pro/<idol>-perspective/` | `roleplay-765pro` | **Roleplay 765pro** | 《偶像大师》本家 765PRO 角色的思维框架 / 视角。 |
 
 **怎么判断新 skill 归哪类?** 看它「是什么」而不是「给谁用」——
 
-- 它是一个**做事的流程** → `tool`。
-- 它是一套**以某角色视角说话/思考的方式** → `roleplay-*`,再按角色所属系列选 `roleplay-shinycolors` 还是 `roleplay-765pro`。新系列(如《偶像大师》的其他分支)出来时,加一个 `roleplay-<系列>` plugin 即可,分组名按 kebab-case → Title Case 自动渲染。
+- 它是一个**做事的流程** → `tool`,放在 `skills/<name>/`。
+- 它是一套**以某角色视角说话/思考的方式** → `roleplay-*`,按角色所属系列放在 `skills/shinycolors/<name>/` 或 `skills/765pro/<name>/`。新系列(如《偶像大师》的其他分支)出来时,新建对应子目录并加一个 `roleplay-<系列>` plugin 即可。
 
-> skills.sh 只支持一级分组,无法在 `Roleplay` 下面再嵌套「闪耀色彩 / 本家」子组。所以这里用 `roleplay-shinycolors` / `roleplay-765pro` 两个**平级** plugin 实现,`--list` 里会显示为两个独立分组头(而非嵌套)。
+> skills.sh 只支持一级分组,无法在 `Roleplay` 下面再嵌套「闪耀色彩 / 本家」子组。所以这里用 `roleplay-shinycolors` / `roleplay-765pro` 两个**平级** plugin 实现,`--list` 里会显示为两个独立分组头。
 
 ## 新增一个 skill(完整步骤)
 
@@ -49,10 +57,17 @@ sallyn-skill/
 推荐用 skills CLI 生成骨架:
 
 ```bash
-npx skills init skills/my-skill
+# 工具类
+npx skills init skills/my-tool
+
+# 闪耀色彩系列
+npx skills init skills/shinycolors/my-idol-perspective
+
+# 765PRO 系列
+npx skills init skills/765pro/my-idol-perspective
 ```
 
-也可手动建 `skills/my-skill/`。目录名用 kebab-case,要和 `SKILL.md` 里的 `name` 一致。
+也可手动建目录。目录名用 kebab-case,要和 `SKILL.md` 里的 `name` 一致。
 
 ### 2. 写 `SKILL.md` frontmatter
 
@@ -100,25 +115,35 @@ npx skills add . --list
       "skills": [
         "./skills/translate-srt",
         "./skills/lyrics-translator",
-        "./skills/my-skill"                  // ← 新增这一行
+        "./skills/my-tool"                   // ← 新增这一行
       ]
     },
     {
-      "name": "roleplay-shinycolors",        // 或 "roleplay-765pro"(按角色所属系列)
-      "skills": [ /* ... */ ]
+      "name": "roleplay-shinycolors",        // 闪耀色彩系列
+      "skills": [
+        "./skills/shinycolors/mano-perspective",
+        "./skills/shinycolors/my-idol-perspective"  // ← 新增这一行
+      ]
+    },
+    {
+      "name": "roleplay-765pro",             // 本家 765PRO 系列
+      "skills": [
+        "./skills/765pro/miki-perspective"
+      ]
     }
-    // ...
   ]
 }
 ```
 
-路径必须以 `./` 开头,指向 skill 目录(不含 `SKILL.md`)。角色扮演类要按系列选 `roleplay-shinycolors` 或 `roleplay-765pro`,别都往一个里塞。
+路径必须以 `./` 开头,指向 skill 目录(不含 `SKILL.md`)。
 
-**为什么要登记?** `skills add --list` 是按 `marketplace.json` 里声明的 plugin 名分组的(`getPluginGroupings` 机制)。没登记的 skill 会被归到未分组的 `General` 下,而不是你期望的 `Tool` / `Roleplay Shinycolors` / `Roleplay 765pro` 分组里。再跑一次 `npx skills add . --list` 确认它落在正确的分组标题下。
+**为什么要登记?** `skills add --list` 是按 `marketplace.json` 里声明的 plugin 名分组的(`getPluginGroupings` 机制)。没登记的 skill 会被归到未分组的 `General` 下,而不是你期望的分组里。再跑一次 `npx skills add . --list` 确认它落在正确的分组标题下。
 
-### 6. 更新 README
+### 6. 更新 README 与索引页
 
-在 [README.md](./README.md) 对应分类的表格里加一行,包含 skill 链接、tags 和简介。
+- **工具类**:在 [README.md](./README.md) 的「工具类」表格中添加一行。
+- **闪耀色彩**:在 [`skills/shinycolors/README.md`](./skills/shinycolors/README.md) 对应组合的表格中更新状态为已上线,并补充简介与链接。若为代表性角色,可同步更新主 README。
+- **本家 765PRO**:在 [`skills/765pro/README.md`](./skills/765pro/README.md) 及主 README 表格中添加一行。
 
 ### 7. 提交
 
@@ -128,7 +153,7 @@ npx skills add . --list
 <type>(<scope>): <说明>
 ```
 
-常见用法(参考现有 commit 历史):
+常见用法:
 
 | type | 用于 |
 |---|---|
@@ -138,19 +163,10 @@ npx skills add . --list
 | `docs(readme)` | 改 README 文档 |
 | `chore(skills)` | 目录结构 / 命名 / 清理类改动 |
 
-例:
-
-```
-feat(skills): add my-skill
-fix(translate-srt): 修复 clean 的全角标点处理
-docs(readme): 按工具类/角色扮演类分类展示 skills
-```
-
 ## 改动 `.claude-plugin/marketplace.json` 时要注意
 
 - 它是 [Claude Code 插件市场清单](https://docs.claude.com/en/docs/claude-code/plugins-marketplaces)格式,这里只用它给 `skills add --list` 提供分组信息。
-- 三个 plugin 的 `name` 分别是 `tool`、`roleplay-shinycolors`、`roleplay-765pro`,会按 kebab-case → Title Case 渲染成 `Tool` / `Roleplay Shinycolors` / `Roleplay 765pro` 分组标题。想改分组名时,改这里的 `name` 即可。
-- skills.sh 只支持一级分组,没法在 `Roleplay` 下嵌套子组,所以角色扮演类用 `roleplay-<系列>` 两个平级 plugin 实现子分类。新增系列时加一个 `roleplay-<系列>` plugin。
+- 三个 plugin 的 `name` 分别是 `tool`、`roleplay-shinycolors`、`roleplay-765pro`。
 - 每条 skill 路径都要以 `./` 开头;路径会被校验是否落在仓库内(`isContainedIn`),写外部的会被忽略。
 - 它**不影响**单 skill 安装(`--skill <name>`)或全量安装(`--all`),只决定 `--list` 的展示分组。
 
@@ -164,11 +180,8 @@ npx skills add . --list
 npx skills add Sallyn0225/sallyn-skill --list
 
 # 安装单个 skill(本地)
-npx skills add . --skill my-skill
+npx skills add . --skill mano-perspective
 
 # 安装全部 skill
 npx skills add . --all
-
-# 新建 skill 骨架
-npx skills init skills/my-skill
 ```

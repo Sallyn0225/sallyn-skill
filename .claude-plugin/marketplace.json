@@ -19,25 +19,25 @@
       "name": "roleplay-shinycolors",
       "description": "角色扮演类·闪耀色彩:基于深度调研的角色视角。",
       "skills": [
-        "./skills/amana-perspective",
-        "./skills/mayuzumi-fuyuko-perspective",
-        "./skills/kogane-perspective",
-        "./skills/nichika-perspective",
-        "./skills/mano-perspective",
-        "./skills/meguru-perspective",
-        "./skills/hiori-perspective",
-        "./skills/rinze-perspective",
-        "./skills/tenka-perspective",
-        "./skills/toru-perspective"
+        "./skills/shinycolors/amana-perspective",
+        "./skills/shinycolors/mayuzumi-fuyuko-perspective",
+        "./skills/shinycolors/kogane-perspective",
+        "./skills/shinycolors/nichika-perspective",
+        "./skills/shinycolors/mano-perspective",
+        "./skills/shinycolors/meguru-perspective",
+        "./skills/shinycolors/hiori-perspective",
+        "./skills/shinycolors/rinze-perspective",
+        "./skills/shinycolors/tenka-perspective",
+        "./skills/shinycolors/toru-perspective"
       ]
     },
     {
       "name": "roleplay-765pro",
       "description": "角色扮演类·本家 765PRO:基于深度调研的角色视角。",
       "skills": [
-        "./skills/miki-perspective",
-        "./skills/chihaya-perspective",
-        "./skills/haruka-perspective"
+        "./skills/765pro/miki-perspective",
+        "./skills/765pro/chihaya-perspective",
+        "./skills/765pro/haruka-perspective"
       ]
     }
   ]

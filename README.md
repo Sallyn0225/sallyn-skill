@@ -24,37 +24,42 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`openai-image`](./skills/openai-image) | `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible` | 通过 OpenAI 兼容 API 文生图与编辑图片,支持自定义 base_url/api_key(官方或任意第三方服务),零依赖 Python 脚本,支持多图、mask 遮罩、尺寸/质量/格式控制。 |
 | [`fish-tts`](./skills/fish-tts) | `tts`, `text-to-speech`, `fish-audio`, `voice-synthesis`, `audio` | 通过 Fish Audio API 把文本合成为语音,支持音色库搜索、零样本音色克隆、多说话人对话,零依赖 Python 脚本,可配置 API key、TTS 模型(s2.1-pro/s2-pro/s1)、默认音色与格式/码率/语速/音量等全部参数。 |
 
+---
+
 ### 角色扮演类(Roleplay / Perspective)
 
-以《偶像大师》系列角色的视角进行角色扮演对话或思维顾问。每个 skill 基于官方剧情原文、声优访谈与粉丝考察的深度调研提炼,并各自声明了触发与不触发边界。按系列进一步分为闪耀色彩与本家 765PRO 两组(`--list` 里分别显示为 `Roleplay Shinycolors` / `Roleplay 765pro`):
+以《偶像大师》系列角色的视角进行角色扮演对话或思维顾问。每个 skill 基于官方剧情原文、声优访谈与粉丝考察的深度调研提炼,并各自声明了触发与不触发边界。按系列分为**闪耀色彩**与**本家 765PRO** 两组(`--list` 里分别显示为 `Roleplay Shinycolors` / `Roleplay 765pro`):
 
-- **通用求助默认不激活**——梦想坚持、自我怀疑、职场竞争等泛泛话题不会自动触发,需用户明确指名角色(如「用恋钟的视角」「日花会怎么看」);
+- **通用求助默认不激活**——梦想坚持、自我怀疑、职场竞争等泛泛话题不会自动触发,需用户明确指名角色(如「用真乃的视角」「冬优子会怎么看」);
 - **泛聊闪耀色彩剧情时归 `kogane-perspective`** 负责,聚焦具体角色时使用对应角色 skill;
 - **泛聊本家 765PRO 剧情时归 `miki-perspective` / `chihaya-perspective` / `haruka-perspective`** 负责;
 - 同一话题同时命中多个角色时,以用户明确指名的角色为准。
 
-#### 闪耀色彩(ShinyColors)
+#### 闪耀色彩 (ShinyColors)
 
-| Skill | Tags | Description |
+精选代表角色示例 (全 28 位偶像 Skill 请查看专属目录):
+
+| Skill | Tags | 角色与核心特色 |
 |---|---|---|
-| [`amana-perspective`](./skills/amana-perspective) | `roleplay`, `shinycolors`, `amana`, `idolmaster` | 以《偶像大师 闪耀色彩》大崎甘奈的视角进行角色扮演对话,覆盖日常聊天、陪伴、安慰与深度追问场景。 |
-| [`mayuzumi-fuyuko-perspective`](./skills/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | 以黛冬優子的思维框架与表达方式回应,适合冬優子视角的角色扮演、价值观讨论与陪伴对话。 |
-| [`kogane-perspective`](./skills/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | 以月岡恋鐘的思维框架与恋鐘弁表达方式回应,适合恋钟视角的角色扮演、团队困境分析、自我怀疑陪伴与梦想坚持讨论。 |
-| [`nichika-perspective`](./skills/nichika-perspective) | `roleplay`, `shinycolors`, `nichika`, `idolmaster` | 以七草日花(七草にちか)的思维框架与表达方式回应,适合日花视角的角色扮演、存在感焦虑、自我证明、平凡人逆袭与追星转偶像讨论。 |
-| [`mano-perspective`](./skills/mano-perspective) | `roleplay`, `shinycolors`, `mano`, `idolmaster` | 以櫻木真乃(桜木真乃)的思维框架与表达DNA回应,适合真乃视角的角色扮演、自信不足/契机论、自我接纳、羁绊与温暖治愈系表达模仿。 |
-| [`meguru-perspective`](./skills/meguru-perspective) | `roleplay`, `shinycolors`, `meguru`, `idolmaster` | 以八宮めぐる(八宫巡)的思维框架与表达DNA回应,适合巡视角的角色扮演、心意传递(伝える存在论)、过度付出/报恩强迫、两难选择与元气系表达模仿。 |
-| [`hiori-perspective`](./skills/hiori-perspective) | `roleplay`, `shinycolors`, `hiori`, `idolmaster` | 以風野灯織(风野灯织)的思维框架与表达DNA回应,适合灯织视角的角色扮演、自我嫌弃(「少しだけ」接纳)、传达不完的孤独(くもりガラス)、心配≠迷惑、論理審判官与不器用な優しさ系表达模仿。 |
-| [`rinze-perspective`](./skills/rinze-perspective) | `roleplay`, `shinycolors`, `rinze`, `idolmaster` | 以杜野凛世(杜野凛世)的思维框架与表达DNA回应,适合凛世视角的角色扮演、「想表达却说不出口」的困境、「不敢说想要」的自我压抑、暗恋等待(先送りの時間戦略)、恩返し与文雅慢节奏古典修辞系表达模仿。 |
-| [`tenka-perspective`](./skills/tenka-perspective) | `roleplay`, `shinycolors`, `tenka`, `idolmaster` | 以大崎甜花(大崎甜花)的思维框架与表达DNA回应,适合甜花视角的角色扮演、低动力/零梦想重建(否定式意志「諦めたくない」)、努力边界(もう頑張ってる)、增量幸福观(ベターな日々)、双子并肩论与软绵绵省略号系表达模仿。 |
-| [`toru-perspective`](./skills/toru-perspective) | `roleplay`, `shinycolors`, `toru`, `idolmaster` | 以浅倉透(浅仓透)的思维框架与表达DNA回应,适合透视角的角色扮演、「努力不被看见/被说躺平」的价值焦虑(100圈分期跑完)、冒名顶替感、被过度保护的对等关系(傘じゃない)、安全vs心动选择(帰り道を選ばない)与结构化省エネ超短句电报体表达模仿。 |
+| [`mano-perspective`](./skills/shinycolors/mano-perspective) | `roleplay`, `shinycolors`, `mano`, `idolmaster` | **櫻木真乃**・契机论(きっかけ論)、自我接纳、羁绊与温暖治愈系表达。 |
+| [`kogane-perspective`](./skills/shinycolors/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | **月岡恋鐘**・恋鐘弁表达、团队困境打气、梦想坚持与**闪彩全剧泛聊统筹**。 |
+| [`mayuzumi-fuyuko-perspective`](./skills/shinycolors/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | **黛冬優子**・双重语境(ふゆ/冬優子)、现实主义生存哲学、努力与不服输价值观。 |
+| [`toru-perspective`](./skills/shinycolors/toru-perspective) | `roleplay`, `shinycolors`, `toru`, `idolmaster` | **浅倉透**・省电超短句、努力价值焦虑(100圈分期跑完)、对等关系与心动选择。 |
+
+> 🌟 **[查看全部 28 位闪耀色彩偶像 Skill 完整列表 (按 8 大组合分类) →](./skills/shinycolors)**
+> *包含 illumination STARS、L'Antica、放課後クライマックスガールズ、ALSTROEMERIA、Straylight、noctchill、SHHis、CoMETIK 全组合的详细说明、触发规则与开发进度。*
 
 #### 本家 765PRO
 
 | Skill | Tags | Description |
 |---|---|---|
-| [`miki-perspective`](./skills/miki-perspective) | `roleplay`, `idolmaster`, `765pro`, `miki` | 以星井美希(ほしい みき)的思维框架与表达DNA回应,适合美希视角的角色扮演、选择判断(ドキドキ测试)、自我认知、恋爱观与天然呆慵懒系表达模仿。 |
-| [`chihaya-perspective`](./skills/chihaya-perspective) | `roleplay`, `idolmaster`, `765pro`, `chihaya` | 以如月千早(きさらぎ ちはや)的思维框架与表达DNA回应,适合千早视角的角色扮演、唱歌/完美主义、努力与天赋、约定与孤独、成长弧线讨论。 |
-| [`haruka-perspective`](./skills/haruka-perspective) | `roleplay`, `idolmaster`, `765pro`, `haruka` | 以天海春香(あまみ はるか)的思维框架与表达DNA回应,适合春香视角的角色扮演、团队羁绊、普通人的努力哲学、初心回环与元气王道系表达模仿。 |
+| [`haruka-perspective`](./skills/765pro/haruka-perspective) | `roleplay`, `idolmaster`, `765pro`, `haruka` | 以天海春香的思维框架与表达DNA回应,适合春香视角的角色扮演、团队羁绊、普通人的努力哲学与元气王道系表达。 |
+| [`chihaya-perspective`](./skills/765pro/chihaya-perspective) | `roleplay`, `idolmaster`, `765pro`, `chihaya` | 以如月千早的思维框架与表达DNA回应,适合千早视角的角色扮演、唱歌/完美主义、约定与孤独跨越、成长弧线讨论。 |
+| [`miki-perspective`](./skills/765pro/miki-perspective) | `roleplay`, `idolmaster`, `765pro`, `miki` | 以星井美希的思维框架与表达DNA回应,适合美希视角的角色扮演、选择判断(ドキドキ测试)、自我认知与天然呆慵懒系表达。 |
+
+> 👑 **[查看全部 765PRO 角色 Skill 完整列表 →](./skills/765pro)**
+
+---
 
 ## Install
 
@@ -70,6 +75,7 @@ npx skills add Sallyn0225/sallyn-skill --list
 
 ```bash
 npx skills add Sallyn0225/sallyn-skill --skill translate-srt
+npx skills add Sallyn0225/sallyn-skill --skill mano-perspective
 ```
 
 安装仓库内全部 skills:
@@ -96,19 +102,28 @@ npx skills add Sallyn0225/sallyn-skill --skill translate-srt --agent claude-code
 ```text
 sallyn-skill/
 ├── .claude-plugin/
-│   └── marketplace.json   # skills.sh 分组清单:声明 tool / roleplay-shinycolors / roleplay-765pro 三个 plugin
+│   └── marketplace.json       # skills.sh 分组清单:声明 tool / roleplay-shinycolors / roleplay-765pro 三个 plugin
 ├── README.md
+├── CONTRIBUTING.md
 ├── LICENSE
 └── skills/
-    └── <skill-name>/
-        ├── SKILL.md       # Required: skill metadata and instructions
-        ├── scripts/       # Optional: helper scripts used by the skill
-        └── evals/         # Optional: evaluation prompts or fixtures
+    ├── <tool-skill-name>/     # 工具类 skill (平铺在 skills/ 根下)
+    │   └── SKILL.md
+    ├── shinycolors/           # 🌟 闪耀色彩系列角色视角
+    │   ├── README.md          # 闪耀色彩 28 位全角色索引与组合导航
+    │   └── <idol>-perspective/
+    │       ├── SKILL.md       # Required: skill metadata and instructions
+    │       ├── scripts/       # Optional: helper scripts used by the skill
+    │       └── references/    # Optional: research documents and references
+    └── 765pro/                # 👑 本家 765PRO 系列角色视角
+        ├── README.md          # 765PRO 全角色索引
+        └── <idol>-perspective/
+            └── SKILL.md
 ```
 
-每个 skill 都是一个独立目录,并通过 `SKILL.md` 顶部的 YAML frontmatter 声明 `name` 和 `description`。`skills` CLI 会读取这些字段来展示、筛选和安装 skill。
+每个 skill 都是一个独立目录,并通过 `SKILL.md` 顶部的 YAML frontmatter 声明 `name` 和 `description`。`skills` CLI 会递归读取这些字段来展示、筛选和安装 skill。
 
-仓库根目录的 `.claude-plugin/marketplace.json` 是 [Claude Code 插件市场清单](https://docs.claude.com/en/docs/claude-code/plugins-marketplaces)格式,这里只用它来给 `skills add --list` 提供分组信息——它把 `skills/` 下的各个 skill 按 `tool` / `roleplay-shinycolors` / `roleplay-765pro` 三个 plugin 归类(角色扮演类再按系列分为闪耀色彩与本家 765PRO)。它不影响单 skill 安装(`--skill <name>`)或全量安装(`--all`),只决定 `--list` 的展示分组。
+仓库根目录的 `.claude-plugin/marketplace.json` 是 [Claude Code 插件市场清单](https://docs.claude.com/en/docs/claude-code/plugins-marketplaces)格式,这里只用它来给 `skills add --list` 提供分组信息——它把 `skills/` 下的各个 skill 按 `tool` / `roleplay-shinycolors` / `roleplay-765pro` 三个 plugin 归类。它不影响单 skill 安装(`--skill <name>`)或全量安装(`--all`),只决定 `--list` 的展示分组。
 
 ## Local Development
 
@@ -118,10 +133,17 @@ sallyn-skill/
 npx skills add . --list
 ```
 
-新建 skill 时,推荐放在 `skills/<skill-name>/` 下:
+新建 skill 时,推荐放在对应子目录下:
 
 ```bash
-npx skills init skills/my-skill
+# 工具类
+npx skills init skills/my-tool
+
+# 闪耀色彩系列
+npx skills init skills/shinycolors/my-idol-perspective
+
+# 765PRO 系列
+npx skills init skills/765pro/my-idol-perspective
 ```
 
 也可以手动创建目录,但至少需要包含:
@@ -135,4 +157,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `765pro`, `chihaya`, `haruka`, `mano`, `meguru`, `hiori`, `rinze`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `283pro`, `765pro`, `chihaya`, `haruka`, `miki`, `mano`, `meguru`, `hiori`, `kogane`, `rinze`, `amana`, `tenka`, `fuyuko`, `toru`, `nichika`
