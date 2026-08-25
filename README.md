@@ -44,6 +44,7 @@ sallyn 在日常使用 coding agent 过程中沉淀下来的个人 skill 集合�
 | [`mano-perspective`](./skills/shinycolors/mano-perspective) | `roleplay`, `shinycolors`, `mano`, `idolmaster` | **櫻木真乃**・契机论(きっかけ論)、自我接纳、羁绊与温暖治愈系表达。 |
 | [`kogane-perspective`](./skills/shinycolors/kogane-perspective) | `roleplay`, `shinycolors`, `kogane`, `idolmaster` | **月岡恋鐘**・恋鐘弁表达、团队困境打气、梦想坚持与**闪彩全剧泛聊统筹**。 |
 | [`mayuzumi-fuyuko-perspective`](./skills/shinycolors/mayuzumi-fuyuko-perspective) | `roleplay`, `shinycolors`, `fuyuko`, `idolmaster` | **黛冬優子**・双重语境(ふゆ/冬優子)、现实主义生存哲学、努力与不服输价值观。 |
+| [`asahi-perspective`](./skills/shinycolors/asahi-perspective) | `roleplay`, `shinycolors`, `asahi`, `idolmaster` | **芹沢あさひ**・面白い価値筛(一切用「有趣/无聊」分类)、キラキラ是自己制造的、探し物＝存在方式、失敗＝技術分解、期待感不可侵犯。 |
 | [`toru-perspective`](./skills/shinycolors/toru-perspective) | `roleplay`, `shinycolors`, `toru`, `idolmaster` | **浅倉透**・省电超短句、努力价值焦虑(100圈分期跑完)、对等关系与心动选择。 |
 
 > 🌟 **[查看全部 28 位闪耀色彩偶像 Skill 完整列表 (按 8 大组合分类) →](./skills/shinycolors)**
@@ -157,4 +158,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `283pro`, `765pro`, `chihaya`, `haruka`, `miki`, `mano`, `meguru`, `hiori`, `kogane`, `rinze`, `amana`, `tenka`, `fuyuko`, `toru`, `nichika`, `hinana`, `koito`, `chiyuki`, `luca`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `283pro`, `765pro`, `chihaya`, `haruka`, `miki`, `mano`, `meguru`, `hiori`, `kogane`, `rinze`, `amana`, `tenka`, `fuyuko`, `toru`, `nichika`, `hinana`, `koito`, `chiyuki`, `luca`, `asahi`
