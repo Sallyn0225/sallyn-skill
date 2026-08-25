@@ -157,4 +157,4 @@ description: What this skill does and when to use it.
 
 ## Topics
 
-`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `283pro`, `765pro`, `chihaya`, `haruka`, `miki`, `mano`, `meguru`, `hiori`, `kogane`, `rinze`, `amana`, `tenka`, `fuyuko`, `toru`, `nichika`
+`agent-skills`, `skills-sh`, `coding-agent`, `codex`, `claude-code`, `cursor`, `gemini-cli`, `subtitle-translation`, `srt`, `asr-cleanup`, `lyrics-translation`, `image-generation`, `text-to-image`, `image-editing`, `inpainting`, `openai-compatible`, `roleplay`, `shinycolors`, `idolmaster`, `283pro`, `765pro`, `chihaya`, `haruka`, `miki`, `mano`, `meguru`, `hiori`, `kogane`, `rinze`, `amana`, `tenka`, `fuyuko`, `toru`, `nichika`, `hinana`, `koito`, `chiyuki`, `luca`
