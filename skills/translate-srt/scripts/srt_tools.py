@@ -4,12 +4,17 @@
 用法:
   python srt_tools.py init <original.srt>      # 建工作区:复制原 srt + AGENTS.md + _context/(占位 brief/glossary + 空 research)
   python srt_tools.py stats in.srt                  # 体检条目形态,判定该 merge(被切碎)还是 split(多句粘连)
+  python srt_tools.py speakers in.srt               # 列出说话人前缀(`名字: ` / `[S01] `)
+  python srt_tools.py speakers in.srt --map S01=関根瞳  # 占位标签换真名,统一为 `名字: `
+  python srt_tools.py speakers in.srt --drop        # 去掉说话人前缀(单说话人字幕)
   python srt_tools.py merge in.srt -o out.srt       # 把按行宽切碎的条目合并回整句(翻译前用,启发式)
   python srt_tools.py split in.srt -o out.srt       # 把多句粘连的超长条目按句末标点拆成一句一条(翻译前用)
   python srt_tools.py normalize in.srt -o out.srt   # 解析+行合并+时间轴校验+重编号(修正阶段用)
+  python srt_tools.py apply base.srt trans.txt -o out.srt -l <lang>  # 把「编号<TAB>译文」贴回 base 的时间轴
   python srt_tools.py clean in.srt -o out.srt -l <lang>  # normalize + 标点规范化(译文阶段用; -l 决定标点风格)
   python srt_tools.py resplit in.srt -o out.srt -l <lang>  # 把整句译文切回观看用分条(交付前用)
   python srt_tools.py check base.srt target.srt     # 对比条目数/时间轴/漏译(第 4、5 步完成标准)
+  python srt_tools.py provenance orig.srt out.srt   # 查产物的时间点里有多少是插值的(交付前如实告知用户)
   python srt_tools.py --self-test
 """
 import argparse
@@ -33,8 +38,13 @@ CJK_MID_PUNCT = set("，、。．；：～")
 OPEN = set('「『“‘《〈(（«‹"')
 CLOSE = set('」』”’》〉)）»›"')
 TERMINAL_KEEP = set("?？!！…")
-# 说话人前缀 `名字: `(ASR --diarize 产出)。要求冒号后至少一个空格,避免把 12:30 / 午後3:30 误判为前缀
-SPEAKER_RE = re.compile(r"^([^\s:：,，、。．!?！？…]{1,24})[:：] +")
+# 说话人前缀(ASR --diarize 产出),两种形态都认:
+#   冒号式 `名字: 正文` —— 要求冒号后至少一个空格,避免把 12:30 / 午後3:30 误判为前缀
+#   方括号式 `[S01] 正文` —— mossland-asr 等的 diarization 标签。标签限 ASCII(字母开头),
+#     以免把 `[笑] そうですね`、`[音楽] …` 这类事件描述误判成说话人;真名一律走冒号式
+SPEAKER_RE = re.compile(
+    r"^(?:\[([A-Za-z_][A-Za-z0-9_\- ]{0,23})\]|([^\s:：,，、。．!?！？…\[\]]{1,24})[:：]) +"
+)
 # 句末标点(merge 判断上一条是否已收句),其后可跟闭引号
 SENT_END = set("。．.！!？?…")
 # 整条只有一个音频事件/场景描述(如 [オープニングミュージック]),merge 时既不吞并也不被吞
@@ -107,13 +117,28 @@ def _width(text):
 
 
 def _split_speaker(text):
-    """拆出说话人前缀:'丸岡和佳奈: 本日の' -> ('丸岡和佳奈', '本日の');无前缀则 ('', text)。"""
+    """拆出说话人前缀,返回(规范化前缀, 正文);无前缀则 ('', text)。
+
+    前缀含尾随空格,可直接与正文拼接。两种形态各自规范化、不互转
+    (形态互转由 `speakers` 子命令显式做):
+      '丸岡和佳奈: 本日の' -> ('丸岡和佳奈: ', '本日の')
+      '[S01] りすLOG'      -> ('[S01] ', 'りすLOG')
+    """
     m = SPEAKER_RE.match(text)
-    return (m.group(1), text[m.end():]) if m else ("", text)
+    if not m:
+        return "", text
+    label, name = m.group(1), m.group(2)
+    prefix = f"[{label}] " if label is not None else f"{name}: "
+    return prefix, text[m.end():]
+
+
+def _speaker_label(prefix):
+    """前缀 -> 裸标签:'[S01] ' -> 'S01';'関根瞳: ' -> '関根瞳';'' -> ''。"""
+    return prefix.strip().strip("[]").rstrip(":：").strip()
 
 
 def _with_speaker(speaker, body):
-    return f"{speaker}: {body}" if speaker and body else body
+    return f"{speaker}{body}" if speaker and body else body
 
 
 def _ends_sentence(body):
@@ -394,13 +419,166 @@ def resplit_entries(entries, budget, min_dur_ms):
     return out
 
 
-def check(base_path, target_path):
-    """对比两份 SRT 的条目对齐情况。返回退出码:0=一致,1=有差异。"""
+def speaker_counts(entries):
+    """按出现顺序统计说话人前缀:[(前缀, 条目数)];无前缀的条目计在 '' 名下。"""
+    counts = {}
+    for e in entries:
+        sp = _split_speaker(e["text"])[0]
+        counts[sp] = counts.get(sp, 0) + 1
+    return list(counts.items())
+
+
+def rewrite_speakers(entries, mapping=None, drop=False):
+    """落实说话人前缀:按 mapping 把占位标签换成真名(统一为 `名字: ` 形态),或 drop 掉全部前缀。
+
+    mapping 的键写裸标签(`S01`)或完整前缀(`[S01] `)都行。未被 mapping 命中的前缀原样保留,
+    连同命中次数一起返回,由调用方回报。
+    """
+    mapping = {_speaker_label(k): v for k, v in (mapping or {}).items()}
+    unmapped = [sp for sp, _ in speaker_counts(entries)
+                if sp and not drop and _speaker_label(sp) not in mapping]
+    hit = {}
+    for e in entries:
+        sp, body = _split_speaker(e["text"])
+        if not sp:
+            continue
+        if drop:
+            e["text"] = body
+            hit[sp] = hit.get(sp, 0) + 1
+            continue
+        name = mapping.get(_speaker_label(sp))
+        if name:
+            e["text"] = _with_speaker(f"{name}: ", body)
+            hit[sp] = hit.get(sp, 0) + 1
+    return hit, unmapped
+
+
+def speakers(path, output=None, mapping=None, drop=False):
+    """列出/改写说话人前缀。不带 --map/--drop 时只列出,不写文件。返回退出码 0。"""
+    entries = process(Path(path).read_text(encoding="utf-8-sig"), "normalize")
+    counts = speaker_counts(entries)
+    labeled = [(sp, n) for sp, n in counts if sp]
+    print(f"speakers: {len(labeled)} prefix(es) over {len(entries)} entries")  # ponytail: ASCII 输出
+    for sp, n in counts:
+        print(f"  {sp.rstrip() if sp else '(no prefix)'}  x{n}")
+    if not mapping and not drop:
+        if labeled:
+            print("  -> rename with `speakers <file> --map S01=関根瞳`, "
+                  "or strip with `--drop` (single-speaker subtitles)")
+        return 0
+    hit, unmapped = rewrite_speakers(entries, mapping, drop)
+    out = output or path
+    Path(out).write_text(serialize(entries), encoding="utf-8", newline="\n")
+    action = "dropped" if drop else "renamed"
+    print(f"OK: {action} {sum(hit.values())} entries -> {out}")
+    if unmapped:
+        print(f"  WARN prefix left untouched (no mapping): {', '.join(s.rstrip() for s in unmapped)}")
+    return 0
+
+
+# 译文行:`编号<TAB>译文`。分隔符容忍 tab / 竖线 / 冒号 / 空格,译文里的数字不受影响
+TRANS_LINE_RE = re.compile(r"^\s*(\d+)\s*[\t|:：]?[ \t]*(.*?)\s*$")
+
+
+def parse_translation(text, expected_n):
+    """解析「编号<TAB>译文」文本,返回 {编号: 译文}。编号必须恰好覆盖 1..expected_n。
+
+    翻译子代理只写译文、不写时间轴——时间轴由 apply 从原文搬过来,LLM 无从写错。
+    代价是漏行/多行会错位,所以这里把编号完整性当硬约束校验,出问题直接指名条目号。
+    """
+    rows, malformed = {}, []
+    for ln, line in enumerate(text.replace("\r\n", "\n").split("\n"), 1):
+        if not line.strip():
+            continue
+        m = TRANS_LINE_RE.match(line)
+        if not m or not m.group(2):
+            malformed.append((ln, line.strip()[:40]))
+            continue
+        n = int(m.group(1))
+        if n in rows:
+            malformed.append((ln, f"duplicate index #{n}"))
+            continue
+        rows[n] = m.group(2)
+    expected = set(range(1, expected_n + 1))
+    return rows, malformed, sorted(expected - set(rows)), sorted(set(rows) - expected)
+
+
+def apply_translation(base_path, trans_path, out_path, lang=None):
+    """把译文文本贴回 base 的时间轴。返回退出码:0=成功,1=译文有缺漏。"""
+    base = process(Path(base_path).read_text(encoding="utf-8-sig"), "normalize")
+    style = _style_for(lang)
+    rows, malformed, missing, extra = parse_translation(
+        Path(trans_path).read_text(encoding="utf-8-sig"), len(base))
+    ok = True
+    print(f"base={len(base)} entries, translation={len(rows)} lines")  # ponytail: ASCII 输出
+    if malformed:
+        detail = "; ".join(f"line {ln}: {s}" for ln, s in malformed[:10])
+        print(f"  ERROR {len(malformed)} malformed line(s), expected `<index><TAB><text>`: {detail}")
+        ok = False
+    if missing:
+        print(f"  ERROR {len(missing)} entries have no translation: {_preview(missing)}")
+        ok = False
+    if extra:
+        print(f"  ERROR {len(extra)} indexes out of range 1..{len(base)}: {_preview(extra)}")
+        ok = False
+    if not ok:
+        print("  -> fix the translation file and run `apply` again; nothing was written")
+        return 1
+    entries = [{"start": e["start"], "end": e["end"], "text": clean_text(rows[i + 1], style)}
+               for i, e in enumerate(base)]
+    blanked = [i + 1 for i, e in enumerate(entries) if not e["text"]]
+    if blanked:
+        print(f"  ERROR translation is punctuation-only at {len(blanked)} entries: {_preview(blanked)}")
+        print("  -> nothing was written")
+        return 1
+    Path(out_path).write_text(serialize(entries), encoding="utf-8", newline="\n")
+    print(f"OK: {len(entries)} entries -> {out_path}")
+    print("  timeline copied from base (the translator never writes timestamps)")
+    return 0
+
+
+def provenance(orig_path, derived_path):
+    """报告 derived 的时间点里哪些来自原始 ASR、哪些是脚本插值出来的。返回 0=插值都在区间内,1=有越界。
+
+    `split` 和 `resplit` 都会在原条目区间内按字宽比例插入新的切点——这些点是算出来的,
+    **没有音频依据**。交付前必须拿这个数字如实告知用户,让他决定要哪一份。
+    """
+    orig = parse(Path(orig_path).read_text(encoding="utf-8-sig"))
+    derived = parse(Path(derived_path).read_text(encoding="utf-8-sig"))
+    real = {t for e in orig for t in (e["start"], e["end"])}
+    pts = sorted({t for e in derived for t in (e["start"], e["end"])})
+    interp = [t for t in pts if t not in real]
+    outside = [t for t in interp if not any(e["start"] < t < e["end"] for e in orig)]
+    print(f"original: {len(orig)} entries, {len(real)} distinct time points")  # ponytail: ASCII 输出
+    print(f"derived:  {len(derived)} entries, {len(pts)} distinct time points")
+    print(f"  from the original ASR: {len(pts) - len(interp)}")
+    print(f"  interpolated (no audio evidence): {len(interp)}")
+    if outside:
+        print(f"  ERROR {len(outside)} interpolated points fall outside every original entry span: "
+              + ", ".join(_fmt(t) for t in outside[:10]))
+        print("    -> a real ASR boundary was moved; this must not happen")
+        return 1
+    print("  all interpolated points fall strictly inside an original entry span (no real boundary moved)")
+    return 0
+
+
+def check(base_path, target_path, fix_timeline=False):
+    """对比两份 SRT 的条目对齐情况。返回退出码:0=一致,1=有差异。
+
+    fix_timeline=True 时,条目数相同的前提下用 base 的时间轴覆盖 target 并写回
+    ——时间轴本就该逐条相等,错位一定是抄错,没有第二种解释。
+    """
     base = parse(Path(base_path).read_text(encoding="utf-8-sig"))
     target = parse(Path(target_path).read_text(encoding="utf-8-sig"))
     n = min(len(base), len(target))
     ts_bad = [i + 1 for i in range(n)
               if abs(base[i]["start"] - target[i]["start"]) > 1 or abs(base[i]["end"] - target[i]["end"]) > 1]
+    if ts_bad and fix_timeline and len(base) == len(target):
+        for i in range(n):
+            target[i]["start"], target[i]["end"] = base[i]["start"], base[i]["end"]
+        Path(target_path).write_text(serialize(target), encoding="utf-8", newline="\n")
+        print(f"FIXED timeline at {len(ts_bad)} entries from base: {_preview(ts_bad)}")
+        ts_bad = []
     empty = [i + 1 for i, e in enumerate(target) if not _split_speaker(e["text"])[1].strip()]
     identical = [i + 1 for i in range(n) if base[i]["text"] == target[i]["text"]]
     print(f"base={len(base)} entries, target={len(target)} entries")  # ponytail: ASCII 输出
@@ -462,6 +640,13 @@ def stats(path, lang=None, max_width=None, max_dur=LONG_ENTRY_SEC):
     order = sorted(range(n), key=lambda i: -durs[i])[:5]
     print("longest: " + ", ".join(
         f"#{i + 1} ({durs[i] / 1000:.1f}s, {widths[i]}col, {sents[i]} sent)" for i in order))
+    spk = speaker_counts(entries)
+    labeled = [(sp, c) for sp, c in spk if sp]
+    if labeled:
+        detail = ", ".join(f"{sp.rstrip()} x{c}" for sp, c in spk if sp)
+        bare = next((c for sp, c in spk if not sp), 0)
+        print(f"speakers: {len(labeled)} prefix(es) -- {detail}"
+              + (f", no prefix x{bare}" if bare else ""))
     print("VERDICT")
     if ratio >= UNFINISHED_RATIO:
         print(f"  merge: NEEDED -- {len(unfinished)}/{n} ({ratio:.0%}) entries do not end a sentence, "
@@ -476,6 +661,12 @@ def stats(path, lang=None, max_width=None, max_dur=LONG_ENTRY_SEC):
             print("    -> add sentence punctuation to these while fixing the transcript, then run `split`")
     else:
         print(f"  split: not needed -- no entry over {max_width}col or {max_dur:.0f}s")
+    if len(labeled) == 1:
+        print(f"  speakers: single speaker ({labeled[0][0].rstrip()}) -- strip the prefix in step 3b: "
+              "`speakers <file> --drop`")
+    elif labeled:
+        print(f"  speakers: {len(labeled)} speakers -- put the real names in, in step 3b: "
+              "`speakers <file> --map S01=NAME --map S02=NAME`")
     return 0
 
 
@@ -519,7 +710,8 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 - `{stem}.srt` — 原始字幕副本（不要直接改，改带后缀的产物）
 - `{stem}_merged.srt` — `merge` 产物：按行宽切碎的条目合并回整句（输入本来就一句一条时没有这个文件）
 - `{stem}_fix.srt` — 转录修正稿（原语言，一条一整句，纠正听录错误；`split` 原地作用于它）
-- `{stem}_<lang>.srt` — 翻译初稿
+- `{stem}_<lang>.txt` — 翻译子代理的原始输出：一行一条的 `编号<TAB>译文`，不含时间轴
+- `{stem}_<lang>.srt` — 翻译初稿（`apply` 把上面那份贴回 `_fix.srt` 的时间轴生成）
 - `{stem}_<lang>_fix.srt` — 复核稿
 - `{stem}_<lang>_split.srt` — 重切分终稿，**交付给用户的就是这一份**
 - `AGENTS.md` — 本文件，说明结构与流程
@@ -534,12 +726,12 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 按静音粘连成一大坨的拆成一句一条（`split`）——再翻译（语义完整、时间轴对得上，译文质量最高），
 最后一步才按目标语言行宽切回观看用分条。所以中间产物条目少而长，属正常。
 
-0. 跑 `stats` 体检，看 `VERDICT` 判定该 `merge` 还是 `split`（或都不需要）
+0. 跑 `stats` 体检，看 `VERDICT` 判定该 `merge` 还是 `split`（或都不需要），以及有几个说话人
 1. 建工作目录（已完成，由 `srt_tools.py init` 生成本文件与 `_context/` 占位）
 2. 问清原始/目标语言、主题、各说话人是谁；通读 `{stem}.srt` 提炼专名与引述段落；派调研子代理把结果写入 `_context/research/`；主代理读调研文件后编辑 `_context/brief.md` 和 `_context/glossary.md`
-3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 主代理对照简报/术语表**定点 Edit** 纠错、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
-4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ `{stem}_<lang>.srt`，跑 `clean` + `check`
-5. 派复核子代理（先复制再定点 Edit）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`
+3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 主代理对照简报/术语表**定点 Edit** 纠错、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
+4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
+5. 派复核子代理（先复制再定点 Edit）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
 6. 跑 `resplit` 切回观看用分条 → `{stem}_<lang>_split.srt`
 7. 主代理抽查终稿，向用户报告产出路径、术语表、修正要点
 """
@@ -640,8 +832,18 @@ def self_test():
     assert clean_text("丸岡和佳奈：本日の") == "丸岡和佳奈 本日の"  # 冒号后无空格,不当作前缀
     assert clean_text("集合は12:30だよ。") == "集合は12:30だよ"  # 时间不被误判为前缀
     assert clean_text("丸岡和佳奈: 。") == ""  # 正文清空 -> 整条作废,不留 `说话人: ` 空壳
-    assert _split_speaker("丸岡和佳奈: 本日の") == ("丸岡和佳奈", "本日の")
+    assert _split_speaker("丸岡和佳奈: 本日の") == ("丸岡和佳奈: ", "本日の")
     assert _split_speaker("本日のワード") == ("", "本日のワード")
+    # 方括号式前缀(mossland-asr 等 diarization 标签):原样保留,不被 BRACKET_MAP 改成圆括号
+    assert _split_speaker("[S01] りすLOG") == ("[S01] ", "りすLOG")
+    assert _split_speaker("[SPEAKER_00]  Hello") == ("[SPEAKER_00] ", "Hello")
+    assert clean_text("[S01] 皆さん、こんばんは。") == "[S01] 皆さん こんばんは"
+    assert clean_text("[S01] 。") == ""  # 正文清空 -> 整条作废
+    # 事件描述不是说话人:非 ASCII 标签、以及方括号后无空格的,都不当前缀
+    assert _split_speaker("[笑] そうですね") == ("", "[笑] そうですね")
+    assert _split_speaker("[オープニングミュージック] はい") == ("", "[オープニングミュージック] はい")
+    assert clean_text("[笑]真的吗?") == "(笑)真的吗?"
+    assert _speaker_label("[S01] ") == "S01" and _speaker_label("関根瞳: ") == "関根瞳"
     assert _width("今天的侘寂词") == 12 and _width("Hello") == 5
     assert _ends_sentence("そうですね。") and _ends_sentence("「はい。」") and not _ends_sentence("本日の")
     # merge: 未收句 + 同说话人 + 间隔够近 -> 合并,时间轴取并集
@@ -662,6 +864,16 @@ def self_test():
     event = ("1\n00:00:01,000 --> 00:00:02,000\n[オープニングミュージック]\n\n"
              "2\n00:00:02,000 --> 00:00:04,000\n本日の\n")
     assert len(process(event, "merge", max_gap=2.0, max_merged_duration=20.0)) == 2  # 音频事件不被吞并
+    # merge 在方括号式前缀下同样成立:同标签合并、跨标签不合并、前缀后的事件描述不被吞并
+    br_two = ("1\n00:00:01,000 --> 00:00:02,000\n[S01] 本日の\n\n"
+              "2\n00:00:02,000 --> 00:00:04,000\n[S01] ワード。\n")
+    assert [e["text"] for e in process(br_two, "merge", max_gap=2.0, max_merged_duration=20.0)] \
+        == ["[S01] 本日のワード。"]
+    assert len(process(br_two.replace("[S01] ワード。", "[S02] ワード。"), "merge",
+                       max_gap=2.0, max_merged_duration=20.0)) == 2
+    br_event = ("1\n00:00:01,000 --> 00:00:02,000\n[S01] [オープニングミュージック]\n\n"
+                "2\n00:00:02,000 --> 00:00:04,000\n[S01] 本日の\n")
+    assert len(process(br_event, "merge", max_gap=2.0, max_merged_duration=20.0)) == 2
     # _sentences: 句末标点断句,引号内与数字里的 . 不断
     assert _sentences("はい。そうです。") == ["はい。", "そうです。"]
     assert _sentences("一文だけです。") == ["一文だけです。"]
@@ -718,6 +930,39 @@ def self_test():
     assert narrow[0]["start"] == 0 and narrow[-1]["end"] == 12000
     assert len(process("1\n00:00:00,000 --> 00:00:02,000\n短句\n", "resplit", lang="zh",
                        min_duration=1.0, max_line_width=None)) == 1  # 预算内原样透传
+    # resplit 在方括号式前缀下同样每条都带前缀,且前缀不占行宽预算
+    br_wide = f"1\n00:00:00,000 --> 00:00:12,000\n[S01] {_split_speaker(long_zh)[1]}\n"
+    br_parts = process(br_wide, "resplit", lang="zh", min_duration=1.0, max_line_width=None)
+    assert len(br_parts) == len(parts)
+    assert all(p["text"].startswith("[S01] ") for p in br_parts)
+    assert all(_width(_split_speaker(p["text"])[1]) <= CJK_LINE_WIDTH for p in br_parts)
+    # split 同样透传方括号式前缀
+    br_glued = ("1\n00:00:00,000 --> 00:00:20,000\n"
+                "[S01] 一つ目の文です。二つ目の文です。三つ目の文です。\n")
+    assert [p["text"] for p in process(br_glued, "split", lang="ja", max_width=None,
+                                       max_duration=12.0, min_duration=1.0, report={})] == [
+        "[S01] 一つ目の文です。", "[S01] 二つ目の文です。", "[S01] 三つ目の文です。"]
+    # speakers: 列出 / --map 换真名并统一为冒号式 / --drop 去前缀
+    mixed = ("1\n00:00:00,000 --> 00:00:02,000\n[S01] おはよう。\n\n"
+             "2\n00:00:02,000 --> 00:00:04,000\n[S02] こんばんは。\n\n"
+             "3\n00:00:04,000 --> 00:00:06,000\nナレーション。\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "sp.srt"
+        p.write_text(mixed, encoding="utf-8")
+        assert speaker_counts(process(mixed, "normalize")) == [("[S01] ", 1), ("[S02] ", 1), ("", 1)]
+        assert speakers(str(p)) == 0  # 只列出,不写文件
+        assert p.read_text(encoding="utf-8") == mixed
+        renamed = Path(d) / "renamed.srt"
+        assert speakers(str(p), str(renamed), {"S01": "関根瞳", "[S02] ": "丸岡和佳奈"}) == 0
+        assert [e["text"] for e in process(renamed.read_text(encoding="utf-8"), "normalize")] == [
+            "関根瞳: おはよう。", "丸岡和佳奈: こんばんは。", "ナレーション。"]
+        dropped = Path(d) / "dropped.srt"
+        assert speakers(str(p), str(dropped), drop=True) == 0
+        assert [e["text"] for e in process(dropped.read_text(encoding="utf-8"), "normalize")] == [
+            "おはよう。", "こんばんは。", "ナレーション。"]
+        partial = Path(d) / "partial.srt"
+        speakers(str(p), str(partial), {"S01": "関根瞳"})  # 未命中的 [S02] 原样保留并 WARN
+        assert "[S02] こんばんは。" in partial.read_text(encoding="utf-8")
     sample = "2\n00:00:03,500 --> 00:00:02,000\nsecond\n\n1\n00:00:01,000 --> 00:00:02,000\n第一\n行\n"
     es = process(sample, "normalize")
     assert [e["text"] for e in es] == ["第一行", "second"]
@@ -731,6 +976,45 @@ def self_test():
     zh_sample = "1\n00:00:01,000 --> 00:00:02,000\n你好，世界。\n"
     zh_es = process(zh_sample, "clean", lang="zh")
     assert [e["text"] for e in zh_es] == ["你好 世界"]
+    # provenance: split/resplit 插出来的点必须落在原条目区间内,真实边界一个都不能动
+    with tempfile.TemporaryDirectory() as d:
+        o = Path(d) / "o.srt"
+        o.write_text("1\n00:00:00,000 --> 00:00:20,000\n一つ目の文です。二つ目の文です。\n", encoding="utf-8")
+        sp = Path(d) / "sp.srt"
+        sp.write_text(serialize(process(o.read_text(encoding="utf-8"), "split", lang="ja", max_width=None,
+                                        max_duration=12.0, min_duration=1.0, report={})),
+                      encoding="utf-8")
+        assert provenance(str(o), str(sp)) == 0  # 拆出的中间点在 0~20s 内部
+        assert provenance(str(o), str(o)) == 0  # 自己对自己:零插值
+        moved = Path(d) / "moved.srt"
+        moved.write_text("1\n00:00:00,000 --> 00:00:10,000\nA\n\n"
+                         "2\n00:00:10,000 --> 00:00:25,000\nB\n", encoding="utf-8")
+        assert provenance(str(o), str(moved)) == 1  # 25s 越出了原区间 -> 报错
+    # apply: 译文只有「编号<TAB>译文」,时间轴从 base 搬,顺带跑 clean
+    with tempfile.TemporaryDirectory() as d:
+        b = Path(d) / "b.srt"
+        b.write_text("1\n00:00:01,000 --> 00:00:02,000\n本日の\n\n"
+                     "2\n00:00:02,000 --> 00:00:03,000\nワード\n", encoding="utf-8")
+        tr = Path(d) / "t.txt"
+        tr.write_text("1\t今天的，\n\n2\t词。\n", encoding="utf-8")
+        out = Path(d) / "o.srt"
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 0
+        assert [e["text"] for e in process(out.read_text(encoding="utf-8"), "normalize")] == ["今天的", "词"]
+        assert out.read_text(encoding="utf-8").startswith("1\n00:00:01,000 --> 00:00:02,000\n今天的\n")
+        # 分隔符容忍 tab / 竖线 / 冒号 / 空格,译文里以数字开头也不会被吃掉
+        tr.write_text("1|今天的\n2: 3.5 个词\n", encoding="utf-8")
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 0
+        assert [e["text"] for e in process(out.read_text(encoding="utf-8"), "normalize")] == ["今天的", "3.5 个词"]
+        # 漏行 / 重号 / 越界 / 空译文 -> 报错且不写文件
+        out.unlink()
+        tr.write_text("1\t今天的\n", encoding="utf-8")
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 1 and not out.exists()
+        tr.write_text("1\t今天的\n1\t重复\n2\t词\n", encoding="utf-8")
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 1 and not out.exists()
+        tr.write_text("1\t今天的\n2\t词\n3\t多余\n", encoding="utf-8")
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 1 and not out.exists()
+        tr.write_text("1\t今天的\n2\t。\n", encoding="utf-8")  # clean 后为空
+        assert apply_translation(str(b), str(tr), str(out), "zh") == 1 and not out.exists()
     # check: 条目数/时间轴对齐
     with tempfile.TemporaryDirectory() as d:
         base = Path(d) / "base.srt"
@@ -747,16 +1031,25 @@ def self_test():
         shifted.write_text("1\n00:00:01,000 --> 00:00:02,000\n今天的\n\n"
                            "2\n00:00:02,500 --> 00:00:03,000\n词\n", encoding="utf-8")
         assert check(str(base), str(shifted)) == 1  # 时间轴错位
+        assert check(str(base), str(shifted), fix_timeline=True) == 0  # 用 base 的时间轴覆盖并写回
+        assert check(str(base), str(shifted)) == 0  # 已修好,再查就干净了
+        assert [e["text"] for e in parse(shifted.read_text(encoding="utf-8"))] == ["今天的", "词"]  # 译文没被动
+        assert check(str(base), str(short), fix_timeline=True) == 1  # 条目数不一致时拒绝修
         assert check(str(base), str(base)) == 0  # 全同 -> 仅 NOTE 提示漏译,不算失败
     print("self-test OK")
 
 
 def main():
+    # 说话人名与日文文件名要原样打得出来:Windows 上 stdout 缺省是 GBK/CP932,会把它们打成乱码
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode", choices=["init", "stats", "merge", "split", "normalize", "clean", "resplit", "check"],
+    ap.add_argument("mode", choices=["init", "stats", "speakers", "merge", "split", "normalize", "clean",
+                                     "apply", "resplit", "check", "provenance"],
                     nargs="?")
     ap.add_argument("input", nargs="?")
-    ap.add_argument("input2", nargs="?", help="check 模式的第二个文件(target)")
+    ap.add_argument("input2", nargs="?", help="check 的第二个文件(target);apply 的译文文本")
     ap.add_argument("-o", "--output")
     ap.add_argument("-l", "--lang", help=f"语言(ISO 639-1,如 zh/ja/en)。决定 clean 的标点风格与 resplit 的行宽:cjk=逗号转空格/{CJK_LINE_WIDTH} 列,其余=保留句中标点/{LATIN_LINE_WIDTH} 列。clean/resplit 传目标语言,stats/split 作用于原文、传原文语言")
     ap.add_argument("--max-gap", type=float, default=2.0, help="merge: 超过该静音秒数就不再合并(默认 2.0)")
@@ -765,6 +1058,12 @@ def main():
     ap.add_argument("--max-duration", type=float, default=LONG_ENTRY_SEC, help=f"stats/split: 超长条目的时长阈值秒数(默认 {LONG_ENTRY_SEC:.0f})")
     ap.add_argument("--max-line-width", type=int, help=f"resplit: 每条最大显示列宽(全角算 2 列)。缺省按 -l 取 cjk {CJK_LINE_WIDTH} / 其余 {LATIN_LINE_WIDTH}")
     ap.add_argument("--min-duration", type=float, default=1.0, help="resplit: 切分出的段的最短秒数,不足则从相邻长段借时间(默认 1.0)。无需切分、原样透传的条目不受影响")
+    ap.add_argument("--map", action="append", metavar="LABEL=NAME",
+                    help="speakers: 把说话人标签改写为真名并统一为 `名字: `(如 --map S01=関根瞳,可重复)")
+    ap.add_argument("--drop", action="store_true",
+                    help="speakers: 去掉全部说话人前缀(整份只有一个说话人时用)")
+    ap.add_argument("--fix-timeline", action="store_true",
+                    help="check: 条目数一致时,用 base 的时间轴覆盖 target 并写回(时间轴错位一定是抄错)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:
@@ -778,7 +1077,29 @@ def main():
     if args.mode == "check":
         if not args.input2:
             ap.error("check needs two files: check <base.srt> <target.srt>")
-        return sys.exit(check(args.input, args.input2))
+        return sys.exit(check(args.input, args.input2, args.fix_timeline))
+    if args.mode == "provenance":
+        if not args.input2:
+            ap.error("provenance needs two files: provenance <original.srt> <derived.srt>")
+        return sys.exit(provenance(args.input, args.input2))
+    if args.mode == "apply":
+        if not args.input2:
+            ap.error("apply needs two files: apply <base.srt> <translation.txt>")
+        if not args.output:
+            ap.error("apply needs -o <out.srt> (it never overwrites the base)")
+        return sys.exit(apply_translation(args.input, args.input2, args.output, args.lang))
+    if args.mode == "speakers":
+        if args.map and args.drop:
+            ap.error("--map and --drop are mutually exclusive")
+        mapping = {}
+        for item in args.map or []:
+            if "=" not in item:
+                ap.error(f"--map expects LABEL=NAME, got: {item}")
+            k, v = item.split("=", 1)
+            if not k.strip() or not v.strip():
+                ap.error(f"--map expects LABEL=NAME, got: {item}")
+            mapping[k.strip()] = v.strip()
+        return sys.exit(speakers(args.input, args.output, mapping, args.drop))
     report = {}
     src = process(Path(args.input).read_text(encoding="utf-8-sig"), "normalize") if args.mode == "merge" else None
     entries = process(
