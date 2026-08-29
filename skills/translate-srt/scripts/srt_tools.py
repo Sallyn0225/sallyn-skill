@@ -824,12 +824,13 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 - `{stem}_fix.srt` — 转录修正稿（原语言，一条一整句，纠正听录错误；`split` 原地作用于它）
 - `{stem}_<lang>.txt` — 翻译子代理的原始输出：一行一条的 `编号<TAB>译文`，不含时间轴
 - `{stem}_<lang>.srt` — 翻译初稿（`apply` 把上面那份贴回 `_fix.srt` 的时间轴生成）
-- `{stem}_<lang>_fix.srt` — 复核稿
+- `{stem}_<lang>_fix.srt` — 复核稿（信/达：定点改错译漏译）
+- `{stem}_<lang>_polish.srt` — 润色稿（雅：逐条重写措辞、切换语域）
 - `{stem}_<lang>_split.srt` — 重切分终稿，**交付给用户的就是这一份**
 - `AGENTS.md` — 本文件，说明结构与流程
 - `_context/` — 背景资料区
-  - `brief.md` — 背景简报：内容概述、专名、疑似听录错误。修正/翻译/复核前都要读。
-  - `glossary.md` — 术语表：原语言 → 目标语言标准译名（含说话人名）。翻译/复核必须遵循。
+  - `brief.md` — 背景简报：内容概述、**风格基调（体裁 + 按条目号的语域分区）**、专名、疑似听录错误。修正/翻译/复核/润色前都要读。
+  - `glossary.md` — 术语表：原语言 → 目标语言标准译名（含说话人名）。翻译/复核/润色必须遵循。
   - `research/` — 调研子代理产出的原始文件（`NN-topic.md`）。简报与术语表由它提炼而来；不够时回这里查细节。
 
 ## 流程
@@ -840,10 +841,11 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 
 0. 跑 `stats` 体检，看 `VERDICT` 判定该 `merge` 还是 `split`（或都不需要），以及有几个说话人
 1. 建工作目录（已完成，由 `srt_tools.py init` 生成本文件与 `_context/` 占位）
-2. 问清原始/目标语言、主题、各说话人是谁；通读 `{stem}.srt` 提炼专名与引述段落；派调研子代理把结果写入 `_context/research/`；主代理读调研文件后编辑 `_context/brief.md` 和 `_context/glossary.md`
+2. 问清原始/目标语言、主题、各说话人是谁；通读 `{stem}.srt` 提炼专名、引述段落与**风格基调**（体裁 + 按条目号的语域分区，前缀去掉后子代理只剩它可依）；派调研子代理把结果写入 `_context/research/`；主代理读调研文件后编辑 `_context/brief.md` 和 `_context/glossary.md`
 3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 主代理对照简报/术语表**定点 Edit** 纠错、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
-4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
-5. 派复核子代理（先复制再定点 Edit）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
+4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范、风格指南）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
+5a. 派复核子代理管**信/达**（先复制再定点 Edit，只改错不润色）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
+5b. 派润色子代理管**雅**（先复制再逐条重写；对着原文 `{stem}_fix.srt` 改，不是对着上一版译文顺嘴改）→ `{stem}_<lang>_polish.srt`，同样跑 `clean` + `check`；主代理通读全文查半改不改的残留。两趟必须分开派，合成一趟会被「多数条目不动」压住
 6. 跑 `resplit` 切回观看用分条 → `{stem}_<lang>_split.srt`
 7. 主代理抽查终稿，向用户报告产出路径、术语表、修正要点
 """
@@ -855,6 +857,21 @@ BRIEF_MD_TEMPLATE = """# 背景简报 — {stem}
 ## 内容概述
 
 （待填）
+
+## 风格基调
+
+> 翻译与润色子代理靠这一节切换语域。说话人前缀在第 3b 步就被去掉了，前缀一去，
+> 谁在说话只剩条目号能表达——这张表不写，子代理只能从上下文猜，猜错整段语体就崩。
+
+**全片体裁**：（严肃纪录片 / 反讽吹捧 / 科普讲解 / 广播闲聊…，它决定基调的高低）
+
+**语域分区**：
+
+| 条目号区间 | 说话人 / 场合 | 语言 | 语体 |
+| --- | --- | --- | --- |
+| （待填） | | | |
+
+**原文的笑点位置**：（双关、谐音、反差用词所在的条目号；直译必然蒸发，需按风格指南补偿）
 
 ## 专名
 
