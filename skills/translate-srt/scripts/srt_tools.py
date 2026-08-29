@@ -90,6 +90,18 @@ ZH_AFTER_EXCEPT = {
 }
 ZH_BREAK_AFTER_COST = 3.0
 ZH_BREAK_BEFORE_COST = 3.2
+# 中英混排的排版空格不是读点,只是排版约定,但它和 clean 转出来的真读点在文本里长得一模一样。
+# 译文保留拉丁专名时(plaskrul / Urilift / ASML / Skillshare),这种空格能占到候选切点的一半,
+# 若按 0.0 当完美读点用就会压倒均分目标,切出「而 krul」/「的设计…」这种 3 字孤儿行。
+# 抬价而非禁止:没有更好的切点时它仍然可用,只是不再无条件胜出
+MIXED_SPACE_COST = 1.5
+# CJK 正文里连续的拉丁词几乎总是一个专名(「Shima Bulgariya」),词内空格同样不是读点
+LATIN_SPACE_IN_CJK_COST = 2.5
+# 混排空格左侧若是这些字,右边的拉丁词是它的中心语或被修饰对象,分家就成了断词:
+# 「这个 plaskrul」「某些 Urilift」「最早的法式 pissoir」
+CJK_GLUE_BEFORE_LATIN = frozenset("的地得着了个些种式型款位名台条只把新老每该此")
+# 混排空格右侧若是这些字,它是左边拉丁词的黏着成分,同样不能分家:「krul 的设计」
+CJK_GLUE_AFTER_LATIN = frozenset("的地得着了们")
 # 每浪费一整行宽度所折算的切点代价。调高=更倾向塞满行宽,调低=更倾向找好切点
 WASTE_WEIGHT = 4.0
 # resplit 的单行列宽预算。上游 ASR 的 28 是「两行中的一行」,而本规范要求一条一行,
@@ -312,17 +324,31 @@ def _cut_cost(text, i, zh=False):
     if nxt in NO_LINE_START or prev in NO_LINE_END:
         return None  # 禁则:闭合符号/小书假名/长音符不可行首,开括号不可行末
     if prev == " " or nxt == " ":
-        # 空格通常是完美切点(clean 已把句中标点转成空格,即天然读点),但有一种空格不是:
-        # 数字与其后 CJK 量词之间的排版空格。在那里断会把「1000 名」「35 个」「3 名」拆到两行,
-        # 数量词分家比劈词还刺眼,所以直接禁掉,逼切点另寻他处
+        # 空格通常是完美切点(clean 已把句中标点转成空格,即天然读点),但混排排版空格不是:
+        # 它长得和读点一模一样,却只是 CJK 与拉丁字母/数字之间的排版约定。详见 MIXED_SPACE_COST
         j, k = i - 1, i
         while j >= 0 and text[j] == " ":
             j -= 1
         while k < len(text) and text[k] == " ":
             k += 1
-        if j >= 0 and k < len(text) and text[j].isdigit() and _is_cjk(text[k]):
-            return None
-        return 0.0
+        if j < 0 or k >= len(text):
+            return 0.0
+        a, b = text[j], text[k]
+        a_cjk, b_cjk = _is_cjk(a), _is_cjk(b)
+        if a_cjk == b_cjk:
+            # 两侧同类。CJK-CJK 是 clean 留下的真读点;拉丁-拉丁在 CJK 正文里多半是专名内部
+            # (「Shima Bulgariya」「St. Andrew」),不该按完美读点切开。
+            # 英文字幕的词间空格不受影响——这一条只在正文含 CJK 时生效
+            if not a_cjk and any(_is_cjk(c) for c in text):
+                return LATIN_SPACE_IN_CJK_COST
+            return 0.0
+        if a_cjk:  # CJK 在左、拉丁在右:「这个 plaskrul」「某些 Urilift」「法式 pissoir」
+            if a in CJK_GLUE_BEFORE_LATIN:
+                return None
+        else:      # 拉丁/数字在左、CJK 在右:「1000 名」「krul 的设计」
+            if a.isdigit() or b in CJK_GLUE_AFTER_LATIN:
+                return None
+        return MIXED_SPACE_COST
     a, b = _script_of(prev), _script_of(nxt)
     if a == "latin" and b == "latin":
         return None  # 不切开拉丁词
@@ -1036,7 +1062,21 @@ def self_test():
     # 数字与其后中文量词之间的排版空格不是读点,不能在那里切开(「1000 名」不该分家)
     assert _cut_cost("前 1000 名通过链接注册的人", 7) is None
     assert _cut_cost("最棒的是 这些课程免费", 4) == 0.0  # 真正的读点仍是完美切点
-    assert _cut_cost("她被罚 140 欧元", 3) == 0.0        # 中文在左、数字在右可以切
+    # 中英混排的排版空格与真读点长得一样,但不是读点,只抬价不禁止
+    assert _cut_cost("她被罚 140 欧元", 3) == MIXED_SPACE_COST      # 中文在左、数字在右仍可切
+    assert _cut_cost("我也强烈推荐看看 Shima Bulgariya 的作品", 8) == MIXED_SPACE_COST
+    # 拉丁专名与其黏着的中文成分不能分家,两个方向都禁
+    assert _cut_cost("而 krul 的设计和它的规划", 6) is None          # 「krul 的」
+    assert _cut_cost("对这个 plaskrul 挺有意见", 3) is None          # 「这个 plaskrul」
+    assert _cut_cost("借鉴了最早的法式 pissoir 的设计", 8) is None   # 「法式 pissoir」
+    # CJK 正文里的拉丁词内空格多半是专名内部,抬价;纯拉丁正文的词间空格照旧是完美读点
+    assert _cut_cost("我也强烈推荐看看 Shima Bulgariya 的作品", 14) == LATIN_SPACE_IN_CJK_COST
+    assert _cut_cost("Hello world and more", 5) == 0.0
+    # 端到端:拉丁专名不该被从中文里剥出来单独成行,人名不该被词内空格劈开
+    mixed = _split_body("而 krul 的设计和它的规划一样令人印象深刻", 38, zh=True)
+    assert len(mixed) == 2 and min(_width(s) for s in mixed) >= 14, mixed
+    name = _split_body("我也强烈推荐看看 Shima Bulgariya 的作品", 38, zh=True)
+    assert any("Shima Bulgariya" in s for s in name), name
     # 中文虚词边界:「的」后优先断,但「地方」「地下」里的「地」是实词,其后不算好切点
     assert _cut_cost("独特的物体", 3, zh=True) == ZH_BREAK_AFTER_COST
     assert _cut_cost("靠近水的地方", 5, zh=True) == SCRIPT_BREAK_COST[("kanji", "kanji")]
