@@ -35,6 +35,9 @@ ELLIPSIS_RE = re.compile(r"\.{2,}|。{2,}|‥+")
 MID_PUNCT = set(",，、。．.;；:：~～—–―‒")
 # CJK 全角标点子集:western 风格保留 ASCII 标点与破折号族,但仍把残留的 CJK 全角标点转空格(译文不该出现这些)
 CJK_MID_PUNCT = set("，、。．；：～")
+# 夹在两个数字之间时保留的标点:小数点、时间冒号、千位分隔逗号(3.5 / 12:30 / 1,000)。
+# 顿号 、 不在其列——它在中文里是列举分隔符,不是数字内部符号
+NUM_INNER = set(".:,．：，")
 OPEN = set('「『“‘《〈(（«‹"')
 CLOSE = set('」』”’》〉)）»›"')
 TERMINAL_KEEP = set("?？!！…")
@@ -72,6 +75,21 @@ SCRIPT_BREAK_COST = {
     ("kata", "hira"): 4.0,
     ("kata", "kata"): 6.0,    # 连续片假名是单个外来语
 }
+# 中文的词边界近似。日语靠假名/汉字交替就能估出词首,中文一整句全是汉字,
+# ("kanji","kanji") 对每个位置给出同一个代价,脚本只能按行宽硬切,必然劈词
+# (实测把「旅游景点」切成「景」/「点」、「公共小便池」切成「小便」/「池」)。
+# 退而求其次靠高频虚词定位:代价压到略低于 4.0,使切点在均分目标前后约 4~5 个字的范围内
+# 优先落到虚词边界上,但不至于为了迁就虚词把两段切得长短悬殊。
+ZH_BREAK_AFTER = frozenset("的地得了着过们吗呢吧啊")   # 其后断开:「的地得」是修饰语标记,其后必是中心语开头
+ZH_BREAK_BEFORE = frozenset("是在把被让使从对向给与和但而就也都还又很更最不没有为")  # 其前断开:多半是新谓语/介词短语的开头
+# 上表按虚词用法立规,但这几个字也当实词用,那时其后断开就是劈词(「地方」「地下」「得到」)
+ZH_AFTER_EXCEPT = {
+    "地": frozenset("方下区上带球图位点址面基产形貌质"),
+    "得": frozenset("到出力知"),
+    "着": frozenset("急想眼手陆火凉"),
+}
+ZH_BREAK_AFTER_COST = 3.0
+ZH_BREAK_BEFORE_COST = 3.2
 # 每浪费一整行宽度所折算的切点代价。调高=更倾向塞满行宽,调低=更倾向找好切点
 WASTE_WEIGHT = 4.0
 # resplit 的单行列宽预算。上游 ASR 的 28 是「两行中的一行」,而本规范要求一条一行,
@@ -149,6 +167,20 @@ def _ends_sentence(body):
     return bool(t) and t[-1] in SENT_END
 
 
+def _has_inner_punct(body):
+    """正文内部(剥掉末尾的句末标点/闭引号后)还有没有任何标点。
+
+    用来区分两种「超长且只有一句」的条目,它们的处置完全相反:
+      内部零标点 -> ASR 把句读整段吃了(实测过 462 列不带一个标点),补上句读再 `split`;
+      内部有标点 -> ASR 的标点是好的,这就是一个真正的长句(英语单句 150~200 字符很常见),
+                    不能硬插句号去切它,留给交付前的 `resplit` 按行宽折行。
+    """
+    t = body.rstrip()
+    while t and (t[-1] in SENT_END or t[-1] in CLOSE):
+        t = t[:-1].rstrip()
+    return any(_is_punct(ch) for ch in t)
+
+
 # 稀疏标点风格的 CJK 目标语言;其余(拉丁/西里尔等)走 western 风格,保留句中标点
 CJK_LANGS = {"zh", "ja", "ko"}
 
@@ -198,8 +230,8 @@ def clean_text(text, style="cjk"):
             if ch in MID_PUNCT:
                 prev = chars[i - 1] if i else ""
                 nxt = chars[i + 1] if i + 1 < len(chars) else ""
-                if ch in ".:．：" and prev.isdigit() and nxt.isdigit():
-                    continue  # 3.5 / 12:30 / ３．５ / １２：３０
+                if ch in NUM_INNER and prev.isdigit() and nxt.isdigit():
+                    continue  # 3.5 / 12:30 / 1,000 / ３．５ / １２：３０
                 chars[i] = " "
         text = "".join(chars)
     else:
@@ -209,8 +241,8 @@ def clean_text(text, style="cjk"):
             if ch in CJK_MID_PUNCT:
                 prev = chars[i - 1] if i else ""
                 nxt = chars[i + 1] if i + 1 < len(chars) else ""
-                if ch in "．：" and prev.isdigit() and nxt.isdigit():
-                    continue  # ３．５ / １２：３０
+                if ch in NUM_INNER and prev.isdigit() and nxt.isdigit():
+                    continue  # ３．５ / １２：３０ / １，０００
                 chars[i] = " "
         text = "".join(chars)
     # 统一空白规范化(两种风格都需要,western 也要 collapse 首尾/多空格/制表符)
@@ -266,11 +298,13 @@ def _script_of(ch):
     return "other"
 
 
-def _cut_cost(text, i):
+def _cut_cost(text, i, zh=False):
     """把 text 切成 text[:i] / text[i:] 的代价,越低越好;None = 禁止在此切。
 
     日语/中文没有空格,脚本类转换代价近似词边界:假名后接汉字通常是新词开头,
     而汉字后接假名多半是同一个词的送り仮名,不能切。
+    zh=True 时额外启用中文虚词边界(见 ZH_BREAK_AFTER/BEFORE)——中文没有假名可依,
+    汉字-汉字处处同价,不给点线索就只能硬切劈词。只对中文开,免得误伤日语里的同形汉字。
     """
     if i <= 0 or i >= len(text):
         return None
@@ -278,15 +312,36 @@ def _cut_cost(text, i):
     if nxt in NO_LINE_START or prev in NO_LINE_END:
         return None  # 禁则:闭合符号/小书假名/长音符不可行首,开括号不可行末
     if prev == " " or nxt == " ":
-        return 0.0  # 空格是完美切点(clean 已把句中标点转成空格,即天然读点)
+        # 空格通常是完美切点(clean 已把句中标点转成空格,即天然读点),但有一种空格不是:
+        # 数字与其后 CJK 量词之间的排版空格。在那里断会把「1000 名」「35 个」「3 名」拆到两行,
+        # 数量词分家比劈词还刺眼,所以直接禁掉,逼切点另寻他处
+        j, k = i - 1, i
+        while j >= 0 and text[j] == " ":
+            j -= 1
+        while k < len(text) and text[k] == " ":
+            k += 1
+        if j >= 0 and k < len(text) and text[j].isdigit() and _is_cjk(text[k]):
+            return None
+        return 0.0
     a, b = _script_of(prev), _script_of(nxt)
     if a == "latin" and b == "latin":
         return None  # 不切开拉丁词
+    if zh and a == "kanji" and b == "kanji":
+        if prev in ZH_BREAK_AFTER and nxt not in ZH_AFTER_EXCEPT.get(prev, ()):
+            return ZH_BREAK_AFTER_COST
+        if nxt in ZH_BREAK_BEFORE:
+            return ZH_BREAK_BEFORE_COST
     return SCRIPT_BREAK_COST.get((a, b), 2.0)
 
 
-def _split_body(body, budget):
-    """按显示列 budget 把正文切成若干段,切点取代价最低者(平手时取最靠后)。"""
+def _split_body(body, budget, zh=False):
+    """按显示列 budget 把正文切成若干段,切点取代价最低者。
+
+    段数由 budget 定死(ceil(总宽/budget)),但每段的目标宽度是**均分**后的宽度,不是塞满 budget。
+    贪心塞满会留下一两个字的孤儿尾段——40 列的句子按 38 列贪心会切成 38+2,末条只剩一个字,
+    既难看又几乎必然把词劈开(候选切点全挤在行尾那一两个字附近,挑无可挑)。
+    均分后切点候选散布在句子中部,命中标点/词边界的机会大得多,两段长度也匀。
+    """
     if _width(body) <= budget:
         return [body]
     segs, rest = [], body
@@ -298,14 +353,17 @@ def _split_body(body, budget):
             w += _cw(ch)
             cut = i + 1
         cut = max(cut, 1)  # budget 小于单字宽时兜底,防死循环
+        # 剩余部分还要切成几段,以及均分后每段的目标宽度(硬上界仍是 budget)
+        rest_w = _width(rest)
+        target = rest_w / max(1, -(-rest_w // budget))
         lo = max(1, cut // 3)
         best, best_score = None, None
         for i in range(cut, lo - 1, -1):
-            c = _cut_cost(rest, i)
+            c = _cut_cost(rest, i, zh)
             if c is None:
                 continue
-            # 在切点质量与行宽利用率之间权衡:好切点值得留白,但不值得留太多
-            score = c + (budget - _width(rest[:i].rstrip())) / budget * WASTE_WEIGHT
+            # 在切点质量与「贴近均分目标」之间权衡:好切点值得偏离目标,但不值得偏太多
+            score = c + abs(_width(rest[:i].rstrip()) - target) / budget * WASTE_WEIGHT
             if best_score is None or score < best_score:
                 best, best_score = i, score
         if best is None:
@@ -384,7 +442,9 @@ def split_entries(entries, max_width, max_dur_ms, min_dur_ms, report=None):
     再切,分配依据变成译文字宽,跨语言字数比不恒定,时间轴会漂移。
 
     只有超出宽度或时长阈值的条目才拆(短的多句条目留在一起,翻译时上下文更完整);
-    内部没有句末标点可切的超长条目原样保留并计入 report["stuck"],由主代理补句读后重跑。
+    内部没有句末标点可切的超长条目原样保留并计入 report["stuck"],元组为
+    (产物里的条目号, 时长ms, 显示列宽, 内部是否有标点)——最后一项区分「ASR 吃了句读、补上就能切」
+    与「本来就是一个长句、不该动」,详见 `_has_inner_punct`。
     report 里的条目号是**产物**里的号(拆分会把后面的条目顺推),主代理拿着它直接去编辑产物。
     """
     out, done, stuck = [], [], []
@@ -394,7 +454,7 @@ def split_entries(entries, max_width, max_dur_ms, min_dur_ms, report=None):
         segs = _sentences(body) if over else [body]
         if not over or len(segs) <= 1:
             if over:
-                stuck.append((len(out) + 1, e["end"] - e["start"], _width(body)))
+                stuck.append((len(out) + 1, e["end"] - e["start"], _width(body), _has_inner_punct(body)))
             out.append(e)
             continue
         done.append((len(out) + 1, len(segs)))
@@ -405,12 +465,12 @@ def split_entries(entries, max_width, max_dur_ms, min_dur_ms, report=None):
     return out
 
 
-def resplit_entries(entries, budget, min_dur_ms):
+def resplit_entries(entries, budget, min_dur_ms, zh=False):
     """把整句译文切回观看用分条:每段不超行宽预算,说话人前缀每条都带且不占预算。"""
     out = []
     for e in entries:
         sp, body = _split_speaker(e["text"])
-        segs = _split_body(body, budget) if body else [body]
+        segs = _split_body(body, budget, zh) if body else [body]
         if len(segs) <= 1:
             out.append(e)
             continue
@@ -629,7 +689,13 @@ def stats(path, lang=None, max_width=None, max_dur=LONG_ENTRY_SEC):
     sents = [len(_sentences(b)) for b in bodies]
     unfinished = [i + 1 for i, b in enumerate(bodies) if not _ends_sentence(b)]
     long_ = [i + 1 for i in range(n) if widths[i] > max_width or durs[i] > max_dur_ms]
+    splittable = [i for i in long_ if sents[i - 1] >= 2]
+    # 超长且只有一句的条目分两种,处置相反(见 _has_inner_punct):
+    #   nopunct — 内部一个标点都没有,ASR 把句读吃了,补上再 split
+    #   oneline — 内部有标点,是一个已经标好的长句,不能硬插句号,留给 resplit
     stuck = [i for i in long_ if sents[i - 1] <= 1]
+    nopunct = [i for i in stuck if not _has_inner_punct(bodies[i - 1])]
+    oneline = [i for i in stuck if _has_inner_punct(bodies[i - 1])]
     print(f"entries={n}  total={_fmt(max(e['end'] for e in entries))}")  # ponytail: ASCII 输出
     print(f"duration/entry  min={min(durs) / 1000:.1f}s  median={_median(durs) / 1000:.1f}s  "
           f"max={max(durs) / 1000:.1f}s  (over {max_dur:.0f}s: {sum(d > max_dur_ms for d in durs)})")
@@ -637,6 +703,10 @@ def stats(path, lang=None, max_width=None, max_dur=LONG_ENTRY_SEC):
           f"max={max(widths)} col  (over {max_width}: {sum(w > max_width for w in widths)})")
     ratio = len(unfinished) / n
     print(f"ends a sentence: {n - len(unfinished)}/{n} ({1 - ratio:.0%})")
+    inner_n = sum(1 for b in bodies if _has_inner_punct(b))
+    inner_ratio = inner_n / n
+    print(f"punctuation inside: {inner_n}/{n} ({inner_ratio:.0%})"
+          "  -- a low ratio means the ASR is dropping punctuation")
     order = sorted(range(n), key=lambda i: -durs[i])[:5]
     print("longest: " + ", ".join(
         f"#{i + 1} ({durs[i] / 1000:.1f}s, {widths[i]}col, {sents[i]} sent)" for i in order))
@@ -653,14 +723,29 @@ def stats(path, lang=None, max_width=None, max_dur=LONG_ENTRY_SEC):
               "i.e. one sentence is spread over several entries")
     else:
         print(f"  merge: not needed -- only {len(unfinished)}/{n} ({ratio:.0%}) entries do not end a sentence")
-    if long_:
-        print(f"  split: NEEDED -- {len(long_)} entries over {max_width}col or {max_dur:.0f}s: {_preview(long_)}")
-        if stuck:
-            print(f"    {len(stuck)} of them have no sentence punctuation inside, `split` cannot cut them: "
-                  f"{_preview(stuck)}")
+    if splittable or nopunct:
+        need = sorted(splittable + nopunct)
+        print(f"  split: NEEDED -- {len(need)} entries over {max_width}col or {max_dur:.0f}s "
+              f"look like several sentences glued together: {_preview(need)}")
+        if splittable:
+            print(f"    {len(splittable)} have sentence punctuation inside, `split` cuts them right away: "
+                  f"{_preview(splittable)}")
+        if nopunct:
+            print(f"    {len(nopunct)} have no punctuation inside at all -- the ASR dropped the sentence "
+                  f"breaks: {_preview(nopunct)}")
             print("    -> add sentence punctuation to these while fixing the transcript, then run `split`")
+            if inner_ratio >= 0.5:
+                print(f"       (but {inner_ratio:.0%} of all entries DO have punctuation inside, so this ASR "
+                      "does keep it -- read these by hand first,")
+                print("        they may simply be single sentences short enough to need no comma)")
     else:
-        print(f"  split: not needed -- no entry over {max_width}col or {max_dur:.0f}s")
+        print(f"  split: not needed -- no glued entry over {max_width}col or {max_dur:.0f}s")
+    if oneline:
+        print(f"  NOTE {len(oneline)} entries are over {max_width}col or {max_dur:.0f}s but are a single, "
+              f"already-punctuated sentence: {_preview(oneline)}")
+        print("       leave them as they are -- `resplit` wraps them at delivery time. Do NOT insert fake "
+              "sentence breaks to make them shorter; that cuts the sentence up and hurts the translation.")
+        print("       (common with latin-script sources: one English sentence of 150-200 chars is normal)")
     if len(labeled) == 1:
         print(f"  speakers: single speaker ({labeled[0][0].rstrip()}) -- strip the prefix in step 3b: "
               "`speakers <file> --drop`")
@@ -690,7 +775,8 @@ def process(text, mode, lang=None, **opts):
                                 int(opts["min_duration"] * 1000), opts.get("report"))
     elif mode == "resplit":
         budget = opts.get("max_line_width") or (CJK_LINE_WIDTH if style == "cjk" else LATIN_LINE_WIDTH)
-        entries = resplit_entries(entries, budget, int(opts["min_duration"] * 1000))
+        zh = (lang or "").lower().replace("_", "-").split("-")[0] == "zh"
+        entries = resplit_entries(entries, budget, int(opts["min_duration"] * 1000), zh)
     return [e for e in entries if e["text"]]
 
 
@@ -812,6 +898,12 @@ def self_test():
     assert clean_text("[笑]真的吗?") == "(笑)真的吗?"
     assert clean_text("Wait... what.") == "Wait… what"
     assert clean_text("现在是3.5版本,时间12:30。") == "现在是3.5版本 时间12:30"
+    # 千位分隔逗号夹在数字之间要保住,否则 1,000 会被拆成 1 000
+    assert clean_text("前 1,000 名可以免费试用。") == "前 1,000 名可以免费试用"
+    assert clean_text("The first 1,000 people.", "western") == "The first 1,000 people."
+    assert clean_text("先看这个,再看那个。") == "先看这个 再看那个"  # 非数字间的逗号照旧转空格
+    assert clean_text("有1、2、3种。") == "有1 2 3种"  # 顿号是列举分隔符,不受数字保护,照旧转空格
+
     assert clean_text("现在是３．５版本,时间１２：３０。") == "现在是３．５版本 时间１２：３０"  # 全角数字/时间保护
     assert clean_text("Hello, world. This is nice.", "western") == "Hello, world. This is nice."  # western 保留句中标点
     assert clean_text("  Hello,   world.  ", "western") == "Hello, world."  # western 也规范化首尾/多空格(句尾 . 保留)
@@ -905,7 +997,18 @@ def self_test():
                  "2\n00:00:20,000 --> 00:00:40,000\nずっと句読点がないまま話し続けている長い一文。\n")
     kept = process(stuck_src, "split", lang="ja", max_width=None, max_duration=12.0,
                    min_duration=1.0, report=rep2)
-    assert len(kept) == 3 and [i for i, _, _ in rep2["stuck"]] == [3]
+    assert len(kept) == 3 and [i for i, *_ in rep2["stuck"]] == [3]
+    assert rep2["stuck"][0][3] is False  # 内部零标点 -> ASR 吃了句读,补上再切
+    # 超长但内部已有标点 = 一个真正的长句(拉丁语系常见),不该被当成粘连去硬插句号
+    rep3 = {}
+    long_en = ("1\n00:00:00,000 --> 00:00:13,000\nOnce fallen, they have the added problem that a canal "
+               "is not easy to climb out of, and being inebriated reduces motor function.\n")
+    assert len(process(long_en, "split", lang="en", max_width=None, max_duration=12.0,
+                       min_duration=1.0, report=rep3)) == 1
+    assert rep3["stuck"][0][3] is True  # 有逗号 -> 留着,交给 resplit
+    assert _has_inner_punct("ずっと句読点がないまま話し続けている長い一文。") is False
+    assert _has_inner_punct("Once fallen, they have a problem.") is True
+    assert _has_inner_punct("「はい、そうです。」") is True
     # stats: 只读体检,不写文件
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "s.srt"
@@ -930,6 +1033,18 @@ def self_test():
     assert narrow[0]["start"] == 0 and narrow[-1]["end"] == 12000
     assert len(process("1\n00:00:00,000 --> 00:00:02,000\n短句\n", "resplit", lang="zh",
                        min_duration=1.0, max_line_width=None)) == 1  # 预算内原样透传
+    # 数字与其后中文量词之间的排版空格不是读点,不能在那里切开(「1000 名」不该分家)
+    assert _cut_cost("前 1000 名通过链接注册的人", 7) is None
+    assert _cut_cost("最棒的是 这些课程免费", 4) == 0.0  # 真正的读点仍是完美切点
+    assert _cut_cost("她被罚 140 欧元", 3) == 0.0        # 中文在左、数字在右可以切
+    # 中文虚词边界:「的」后优先断,但「地方」「地下」里的「地」是实词,其后不算好切点
+    assert _cut_cost("独特的物体", 3, zh=True) == ZH_BREAK_AFTER_COST
+    assert _cut_cost("靠近水的地方", 5, zh=True) == SCRIPT_BREAK_COST[("kanji", "kanji")]
+    assert _cut_cost("红灯区是一个", 3, zh=True) == ZH_BREAK_BEFORE_COST
+    assert _cut_cost("独特的物体", 3, zh=False) == SCRIPT_BREAK_COST[("kanji", "kanji")]  # 日语不受影响
+    # 均分切分:40 列的句子不该被贪心切成 38+2 的孤儿尾段
+    even = _split_body("阿姆斯特丹红灯区是一个臭名昭著的旅游景点", 38)  # 40 列,贪心会切成 38+2
+    assert len(even) == 2 and min(_width(s) for s in even) >= 14, even
     # resplit 在方括号式前缀下同样每条都带前缀,且前缀不占行宽预算
     br_wide = f"1\n00:00:00,000 --> 00:00:12,000\n[S01] {_split_speaker(long_zh)[1]}\n"
     br_parts = process(br_wide, "resplit", lang="zh", min_duration=1.0, max_line_width=None)
@@ -1120,10 +1235,16 @@ def main():
         done, stuck = report.get("done", []), report.get("stuck", [])
         if done:
             print(f"  split: {len(done)} long entries -> {sum(n for _, n in done)} entries")
-        if stuck:
-            detail = ", ".join(f"#{i} ({d / 1000:.1f}s, {w}col)" for i, d, w in stuck[:10])
-            print(f"  WARN {len(stuck)} entries still over limit, no sentence punctuation to cut on: {detail}")
-            print("       add sentence punctuation to these, then run split again")
+        nopunct = [x for x in stuck if not x[3]]
+        oneline = [x for x in stuck if x[3]]
+        if nopunct:
+            detail = ", ".join(f"#{i} ({d / 1000:.1f}s, {w}col)" for i, d, w, _ in nopunct[:10])
+            print(f"  WARN {len(nopunct)} entries still over limit with no punctuation inside at all: {detail}")
+            print("       the ASR dropped the sentence breaks -- add them, then run split again")
+        if oneline:
+            detail = ", ".join(f"#{i} ({d / 1000:.1f}s, {w}col)" for i, d, w, _ in oneline[:10])
+            print(f"  NOTE {len(oneline)} entries over limit are a single, already-punctuated sentence: {detail}")
+            print("       leave them alone -- `resplit` wraps them at delivery time")
 
 
 if __name__ == "__main__":
