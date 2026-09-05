@@ -829,7 +829,7 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 - `AGENTS.md` — 本文件，说明结构与流程
 - `_context/` — 背景资料区
   - `hits.json` — 知识库命中清单（`kb_tools.py match`）：库里已有哪些名字、ASR 错听在哪几条、未覆盖的候选词
-  - `alias_log.tsv` — 别名替换日志（`kb_tools.py replace`）：哪些条目被自动换了、哪些待人工确认
+  - `alias_log.tsv` — 别名替换日志：源时间段、原文、替换状态；整平后用 `remap-log` 更新 `current_entries`
   - `gaps.md` — 缺口清单：库里没有、需要调研的项。补缺调研只查这上面的
   - `brief.md` — 背景简报：内容概述、专名、疑似听录错误、引述段落、风格基调。修正/翻译/复核前都要读。
   - `glossary.md` — 术语表：「来自知识库」一节由脚本生成，「本次新增」由主代理填。翻译/复核必须遵循。
@@ -846,7 +846,7 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 0. 跑 `stats` 体检，看 `VERDICT` 判定该 `merge` 还是 `split`（或都不需要），以及有几个说话人
 1. 建工作目录（已完成，由 `srt_tools.py init` 生成本文件与 `_context/` 占位）
 2. 跑 `kb_tools.py match` 加载知识库、读 `index.md` 与命中领域包 → 问清原始/目标语言、视频日期、主题、各说话人是谁、是否调研 → 通读 `{stem}.srt` 写 `brief.md` 与 `gaps.md` → 派 1 个补缺调研子代理写 `_context/research/` → 跑 `kb_tools.py glossary` 生成术语表并填「本次新增」
-3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 跑 `kb_tools.py replace` 做别名替换 → 主代理对照简报/术语表**定点 Edit** 纠错（含 replace 列出的待确认项）、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
+3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 跑 `kb_tools.py replace` 做别名替换 → 主代理对照简报/术语表**定点 Edit** 纠错（含 replace 列出的待确认项）、给超长条目补句读 → 跑 `split`（没跑则跑 `normalize`）→ `kb_tools.py remap-log {stem}_fix.srt --log _context/alias_log.tsv` 更新日志定位；简报按时间段定位，有附编号则更新为当前稿编号
 4. 派翻译子代理（先读规范、translation-style、`brief.md`、`glossary.md`、领域 `style.md`）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
 5. 派复核子代理（先复制再定点 Edit，写 `review_notes.md`）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
 6. 跑 `resplit` 切回观看用分条 → `{stem}_<lang>_split.srt`；跑 `provenance` 把插值数量告知用户，由用户定交付哪一份
@@ -872,11 +872,11 @@ BRIEF_MD_TEMPLATE = """# 背景简报 — {stem}
 
 ## 引述段落
 
-（待填；朗读来信、复述他人发言的起止条目号与被引述者）
+（待填；朗读来信、复述他人发言的起止时间与被引述者；可附条目号并注明所属文件）
 
 ## 风格基调
 
-（待填；体裁；按条目号区间标语域：旁白 / 新闻 / 街访 / 来信朗读；原文的梗在哪）
+（待填；体裁；按起止时间标语域：旁白 / 新闻 / 街访 / 来信朗读；原文的梗在哪；整平后不能沿用旧编号）
 
 ## 外语插播段
 

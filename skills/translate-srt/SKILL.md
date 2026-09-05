@@ -25,7 +25,7 @@ description: 翻译 SRT 字幕文件到指定语言——加载领域知识库�
     AGENTS.md                      ← 工作区说明(脚本生成)
     _context/                      ← 背景资料区
       hits.json                    ← 知识库命中清单(kb_tools match)
-      alias_log.tsv                ← 别名替换日志(kb_tools replace)
+      alias_log.tsv                ← 别名替换日志(含源时间段,整平后 remap-log 更新当前条目号)
       gaps.md                      ← 缺口清单(主代理写)
       brief.md                     ← 背景简报(占位 → 第 2 步填实)
       glossary.md                  ← 术语表(kb_tools glossary 生成「来自知识库」,主代理填「本次新增」)
@@ -96,6 +96,8 @@ python <skill目录>/scripts/kb_tools.py match <stem>/<stem>.srt -o <stem>/_cont
 
 它拿字幕和整个知识库做别名匹配,打印:命中的名字与出现次数、哪些是 ASR 错听形态、按命中排序的**领域建议**,以及**知识库没覆盖的片假名/拉丁词候选**。然后 Read 知识库的 `index.md`,按命中决定加载哪些领域包(可多个),Read 对应目录的 `entities.md`、`glossary.md`、`style.md`。一个都没命中就当新领域处理,照常往下走,第 8 步沉淀时会建新包。
 
+选定领域后,后续 `glossary` 和 `replace` 都传同一组 `-d <领域>`;多个领域重复传 `-d`。未指定领域时才使用自动路由。
+
 **2b 向用户提问。** 用 AskUserQuestion 问清:原始语言(可提供"自动检测";发现夹了外语插播段就在选项里写明)、目标语言、**视频日期**(判 volatile 条目是否过期;拿不到就用文件时间)、字幕的主题与热词(用户可留空)、**是否调研**。问之前先把 2a 的命中摘要摆出来——「库里已有 N 个人名/节目,缺口候选有 X、Y、Z」——用户看到缺口很少时通常会选跳过。
 
 若 `stats` 报了说话人前缀,**再问各说话人分别是谁**。占位标签必须拿到真名才能进术语表;只有一个说话人时不必问名字,但要告知前缀会在 3b 去掉。多个说话人但全是匿名素材(纪录片常见)时,要连处置方式一起给成选项(全部 `--drop` / 换成角色名 / 只给非旁白加角色名),见 pitfalls「多个说话人不等于问得到真名」。
@@ -107,8 +109,8 @@ python <skill目录>/scripts/kb_tools.py match <stem>/<stem>.srt -o <stem>/_cont
 - 内容概述;
 - 出现的全部专名——人名/作品名/组织名,**含说话人前缀里的名字**,也含商品名、店名、活动名、听众投稿昵称;标出哪些库里已有;
 - 疑似听录错误的词(别名表没覆盖的,附上下文);
-- 引述段落的位置(朗读来信、复述他人发言的起止),翻译子代理靠它切换人称与语体;
-- **风格基调**:体裁、按条目号区间标的语域(旁白/新闻/街访/来信朗读),原文的梗在哪;
+- 引述段落的起止时间(朗读来信、复述他人发言),翻译子代理靠它切换人称与语体;
+- **风格基调**:体裁、按起止时间标的语域(旁白/新闻/街访/来信朗读),原文的梗在哪;可附条目号,但须注明所属文件,不能跨 `merge`/`split` 沿用旧编号;
 - 外语插播段的位置与逐条语义(见 pitfalls「原文可能不止一种语言」)。
 
 同时写 `_context/gaps.md`——**只列库里没有的**:
@@ -125,7 +127,7 @@ python <skill目录>/scripts/kb_tools.py match <stem>/<stem>.srt -o <stem>/_cont
 **2e 汇总落盘。**
 
 ```
-python <skill目录>/scripts/kb_tools.py glossary <stem>/<stem>.srt -o <stem>/_context/glossary.md --video-date <YYYY-MM-DD>
+python <skill目录>/scripts/kb_tools.py glossary <stem>/<stem>.srt -o <stem>/_context/glossary.md --video-date <YYYY-MM-DD> -d <领域>
 ```
 
 它把命中的别名、档案、术语抽成术语表的「来自知识库」一节,并把过期的 volatile 条目标 ⚠。然后 Read `research/` 下全部文件(**不**合并成单一调研文件,避免信息漂移),把新得的译名、自拟译名、听众昵称填进「本次新增」一节;简报据调研补实。跳过调研时「本次新增」由主代理自己拟。
@@ -151,15 +153,15 @@ python <skill目录>/scripts/srt_tools.py speakers <stem>/<stem>_fix.srt --map S
 python <skill目录>/scripts/srt_tools.py speakers <stem>/<stem>_fix.srt --drop
 ```
 
-多个说话人用 `--map` 换成**原语言**真名(译名留到第 4 步);只有一个说话人 `--drop`;匿名素材整体 `--drop` 前先把「标签 → 身份 → 条目号区间」写进 `brief.md`。前缀必须在 `merge` **之后**处理。
+多个说话人用 `--map` 换成**原语言**真名(译名留到第 4 步);只有一个说话人 `--drop`;匿名素材整体 `--drop` 前先把「标签 → 身份 → 起止时间」写进 `brief.md`。前缀必须在 `merge` **之后**处理。
 
 然后跑别名替换:
 
 ```
-python <skill目录>/scripts/kb_tools.py replace <stem>/<stem>_fix.srt --log <stem>/_context/alias_log.tsv
+python <skill目录>/scripts/kb_tools.py replace <stem>/<stem>_fix.srt --log <stem>/_context/alias_log.tsv -d <领域>
 ```
 
-`mode=auto` 的错听直接换成正确写法并打印每一处;`mode=ask` 的只列条目号,**由你对照上下文定点改**——短别名(`鈴本`→`涼本`)到处撞,脚本不敢自动换。替换日志随 `_fix.srt` 一起交给复核角色核对。
+`mode=auto` 的错听直接换成正确写法;`mode=ask` 的列位置,**由你对照上下文定点改**。两者共用最长匹配,长 `ask` 词内部的短 `auto` 不会被替换。日志保存替换前的条目号、时间段和原文;第 3d 步更新当前条目号后,随 `_fix.srt` 一起交给复核角色。
 
 然后 Read `_fix.srt`、用 **Edit 做定点修改**——不要整份重写。主代理亲自做(需要对照简报做同音/近音纠错,不外包)。对照 `brief.md`、`glossary.md`,按规范执行:纠正听录错误(优先怀疑与术语表读音相近的词)、修正 3a 的误合与漏合、把归属错位的句首/句尾词移到相邻条目、删除纯口语废句、精简句内重复口语词、`[]`→`()`。保持原语言,不翻译。
 
@@ -178,6 +180,14 @@ python <skill目录>/scripts/srt_tools.py split <stem>/<stem>_fix.srt -l <原文
 ```
 python <skill目录>/scripts/srt_tools.py normalize <stem>/<stem>_fix.srt
 ```
+
+整平与定点修改完成后,无论有没有拆分,都运行:
+
+```
+python <skill目录>/scripts/kb_tools.py remap-log <stem>/<stem>_fix.srt --log <stem>/_context/alias_log.tsv
+```
+
+它按源时间段更新 `current_entries`,可能对应多条;空值表示原内容可能已删除或移位,需对照 `source_text` 解释。日志的 `entry` 始终是替换前编号,不再用于定位当前稿。`brief.md` 继续以起止时间定位,若附了条目号则在此更新为当前 `_fix.srt` 的编号。
 
 完成标准:`split`(或 `normalize`)输出 OK;`stats` 重跑后 `merge`/`split` 均不再 `NEEDED`,或每一处残留都能说明原因;`merge` 最长的几条已抽查;说话人前缀已落实(不留 `[S01]` 占位);`replace` 列出的 `ask` 项都已处置;原 srt 每一条都已处理(修正、合并、拆分、删除四者之一,多数原样保留也算)。
 
@@ -202,7 +212,7 @@ python <skill目录>/scripts/srt_tools.py check <stem>/<stem>_fix.srt <stem>/<st
 
 派发一个复核角色(见 roles.md),给它 `_fix.srt`、`_<lang>.srt`、原始副本、`alias_log.tsv`,要求先 Read 规范、`translation-style.md`、`brief.md`、`glossary.md`、领域 `style.md`。**不给 research 原始文件。**
 
-任务:先复制为 `_<lang>_fix.srt`,再对有问题的条目定点 Edit;检出并修正漏译、错译、术语不一致、说话人前缀丢失或译名不一致、语体错位、不符合规范的条目;别名替换过的条目对照原始副本确认无误伤。改完写 `_context/review_notes.md`(固定表格,类型列区分「偏好」与一次性错误,格式在 roles.md)。然后跑:
+任务:先复制为 `_<lang>_fix.srt`,再对有问题的条目定点 Edit;检出并修正漏译、错译、术语不一致、说话人前缀丢失或译名不一致、语体错位、不符合规范的条目;别名替换按日志 `current_entries` 定位当前稿,再用源时间段和 `source_text` 对照原始副本确认无误伤。改完写 `_context/review_notes.md`(固定表格,类型列区分「偏好」与一次性错误,格式在 roles.md)。然后跑:
 
 ```
 python <skill目录>/scripts/srt_tools.py clean -l <lang> <stem>/<stem>_<lang>_fix.srt
@@ -254,7 +264,7 @@ python <skill目录>/scripts/srt_tools.py provenance <原 srt 路径> <stem>/<st
 python <skill目录>/scripts/kb_tools.py apply <stem>/_context/sediment_proposal.json --summary <stem>/_context/sediment_result.md
 ```
 
-脚本合并进知识库、查重、译法不一致的标 `CONFLICT` 不覆盖,打印新增/更新/冲突/跳过的一行摘要。然后按 config 的 `review_mode`:
+脚本先在临时副本合并并校验,通过后才更新知识库;同一领域内跨 `aliases.tsv`、`entities.md`、`glossary.md` 的译名冲突也标 `CONFLICT`。返回 2 表示校验或执行失败,先处理错误;校验失败不会改库或提交。成功合并后再按 config 的 `review_mode`:
 
 - `full`(缺省):把摘要给用户看,附上 `kb_tools.py diff` 的输出;用户确认后 `git -C <知识库> add -A && git -C <知识库> commit -m "kb: sediment from <stem>"`,不确认就 `git -C <知识库> checkout -- . && git -C <知识库> clean -fd`。
 - `conflicts_only`:没有 CONFLICT 就直接 `apply --commit`;有则只把冲突项给用户裁决。

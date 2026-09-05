@@ -62,6 +62,10 @@ $TRANSLATE_SRT_HOME/            缺省 ~/.translate-srt/
 
 **`mode` 的判据**:日语子串匹配没有词边界,短别名到处撞。只有 variant 够长(≥3 字)、够独特、且已经在至少一个项目里确认过是错听,才给 `auto`。新沉淀的条目一律 `ask`,下次再遇到、确认无误再升。`kb_tools.py check` 会对短的 auto 别名报 WARN,对 canonical 子串、跨行重复的别名报 ERROR。
 
+`mode` 仍按整行保存,兼容已有 TSV。向 `auto` 行加入新错听写法时,若提案省略 `mode` 或写 `ask`,整行降为 `ask`,包括旧写法;确认该行全部变体满足条件后,再显式提案 `"mode": "auto"`。单独写 `"mode": "ask"` 也可撤销自动替换。
+
+`match` 和 `replace` 共用最长写法占位:长 `ask` 写法及正确写法会保护内部的短 `auto` 片段。替换和待确认位置都从原文计算,不再扫描替换后的文本。
+
 `translation` 只存一种目标语言。目标语言不是它时,别名表仍然用于 ASR 纠错与命中统计,译名由本次翻译另拟。
 
 ## entities.md
@@ -84,6 +88,8 @@ $TRANSLATE_SRT_HOME/            缺省 ~/.translate-srt/
 ## glossary.md
 
 同样 `### ` 分节。多种写法用 ` / ` 分隔在标题里。
+
+同一领域中,canonical / 标题写法相同的条目,在 `aliases.tsv`、`entities.md`、`glossary.md` 中必须使用同一译名。`check` 检查这个约束,`apply` 在跨文件及同一提案内也会判冲突。不同领域的同形词可以有不同译法;`glossary -d alpha -d beta` 分别匹配并保留两个领域的定义。昵称可能重名,不用于推断条目身份。
 
 ```markdown
 ### ふつおた
@@ -119,10 +125,20 @@ $TRANSLATE_SRT_HOME/            缺省 ~/.translate-srt/
 | 文件 | 谁写 | 说明 |
 | --- | --- | --- |
 | `hits.json` | `match` | 命中清单、领域建议、未覆盖的片假名/拉丁词候选 |
-| `alias_log.tsv` | `replace --log` | 每处替换(auto)与待确认(ask)的条目号 |
+| `alias_log.tsv` | `replace --log` + `remap-log` | 每处替换与待确认项的源时间段、原文及当前条目号 |
 | `glossary.md` | `glossary` 生成「来自知识库」一节,主代理填「本次新增」 | 本次专用术语表 |
 | `sediment_proposal.json` | 沉淀子代理 | 见下 |
 | `sediment_result.md` | `apply --summary` | 新增/更新/冲突/跳过的一行摘要 |
+
+### alias_log.tsv 与条目定位
+
+列为 `entry / variant / canonical / status / start_ms / end_ms / source_text / current_entries`,用 TSV 的引号规则保存原文中的制表符等字符:
+
+- `entry`:替换前编号,仅供追溯,不能当成拆分后的编号。
+- `start_ms / end_ms / source_text`:替换前的时间段与原文,后续重映射不会改变它们。
+- `current_entries`:与源时间段重叠的当前条目号,多条用 `;` 分隔。它是候选范围,复核时还须结合原文判断具体片段。
+
+第 3d 步及以后重新整平原文时,运行 `kb_tools.py remap-log <当前_fix.srt> --log <alias_log.tsv>`。找不到重叠条目时该列为空、返回 1 并提示检查删除/移位,不会猜一个编号。缺少时间戳的旧版日志返回 2 且不覆盖;旧项目需对照生成日志时的原文处理,不能直接套当前编号。简报中的语域和引述区间也以起止时间定位。
 
 ## sediment_proposal.json
 
@@ -151,15 +167,20 @@ $TRANSLATE_SRT_HOME/            缺省 ~/.translate-srt/
 }
 ```
 
-`index` 只在需要新领域时给。所有数组都可省略。
+`index` 只在需要新领域时给。所有数组都可省略。`domain` 必须是单层目录名,不能使用绝对路径、`..` 或目录分隔符。
 
 ### apply 的合并规则
 
-- **新条目**直接追加,`来源` 字段自动写成 `项目 (日期)`。
+- 先在临时副本合并并运行 `check`,通过后才替换发生变化的文件。校验失败返回 2,原知识库、Git 暂存区与提交均不变;修正提案后重试。
+- **新条目**追加,`来源` 字段自动写成 `项目 (日期)`。
 - **已有条目**:译名/译法不同 → 不覆盖,记 `CONFLICT`,由用户裁决;别名、asr_variants 取并集;`summary`/`notes` 作为 `- 补充(来源): …` 行追加。
+- **跨文件或同一提案内译名不同**:同样记 `CONFLICT`,不加入冲突的新记录;已有记录保留原译名。空译名或 `(未定)` 可以补全。
 - **variant 已属于别的 canonical** → 不加,记 CONFLICT。
-- `mode` 只对新条目生效;已有条目从 `ask` 升 `auto` 需要提案显式写 `"mode": "auto"`,并会在摘要里单列出来。
+- 新变体没有显式确认 `auto` 时整行降为 `ask`;再次升级需要显式写 `"mode": "auto"`。状态变化在摘要里单列。
 - 有 CONFLICT 时 `apply` 返回 1,`--commit` 也照常提交其余部分——冲突项本来就没写入。
+- 无冲突且成功返回 0。提交失败返回 2 并保留已校验的未提交改动,不会回报成功。
+
+`kb_tools.py diff` 分别显示暂存区、未暂存的修改和未跟踪文件的正文,包括新领域文件,且不修改 Git 暂存区。完整审查应使用这个命令,单独 `git diff` 看不到全部三类内容。
 
 ## 命名一致性
 
