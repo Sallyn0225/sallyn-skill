@@ -2,7 +2,7 @@
 """SRT 清理工具。文本规范的完整定义见 ../references/subtitle-rules.md。
 
 用法:
-  python srt_tools.py init <original.srt>      # 建工作区:复制原 srt + AGENTS.md + _context/(占位 brief/glossary + 空 research)
+  python srt_tools.py init <original.srt>      # 建工作区:复制原 srt + AGENTS.md + _context/(占位 brief/glossary/gaps + 空 research)
   python srt_tools.py stats in.srt                  # 体检条目形态,判定该 merge(被切碎)还是 split(多句粘连)
   python srt_tools.py speakers in.srt               # 列出说话人前缀(`名字: ` / `[S01] `)
   python srt_tools.py speakers in.srt --map S01=関根瞳  # 占位标签换真名,统一为 `名字: `
@@ -828,9 +828,14 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 - `{stem}_<lang>_split.srt` — 重切分终稿，**交付给用户的就是这一份**
 - `AGENTS.md` — 本文件，说明结构与流程
 - `_context/` — 背景资料区
-  - `brief.md` — 背景简报：内容概述、专名、疑似听录错误。修正/翻译/复核前都要读。
-  - `glossary.md` — 术语表：原语言 → 目标语言标准译名（含说话人名）。翻译/复核必须遵循。
-  - `research/` — 调研子代理产出的原始文件（`NN-topic.md`）。简报与术语表由它提炼而来；不够时回这里查细节。
+  - `hits.json` — 知识库命中清单（`kb_tools.py match`）：库里已有哪些名字、ASR 错听在哪几条、未覆盖的候选词
+  - `alias_log.tsv` — 别名替换日志（`kb_tools.py replace`）：哪些条目被自动换了、哪些待人工确认
+  - `gaps.md` — 缺口清单：库里没有、需要调研的项。补缺调研只查这上面的
+  - `brief.md` — 背景简报：内容概述、专名、疑似听录错误、引述段落、风格基调。修正/翻译/复核前都要读。
+  - `glossary.md` — 术语表：「来自知识库」一节由脚本生成，「本次新增」由主代理填。翻译/复核必须遵循。
+  - `research/` — 补缺调研产出（`01-gaps.md`…），每项带来源 URL。简报与术语表由它提炼而来。
+  - `review_notes.md` — 复核修改清单（条目 / 原译 / 改后 / 类型 / 原因）。沉淀阶段读它
+  - `sediment_proposal.json` — 沉淀提案；`sediment_result.md` — 落库摘要
 
 ## 流程
 
@@ -840,12 +845,13 @@ AGENTS_MD_TEMPLATE = """# {stem} 字幕翻译工作区
 
 0. 跑 `stats` 体检，看 `VERDICT` 判定该 `merge` 还是 `split`（或都不需要），以及有几个说话人
 1. 建工作目录（已完成，由 `srt_tools.py init` 生成本文件与 `_context/` 占位）
-2. 问清原始/目标语言、主题、各说话人是谁；通读 `{stem}.srt` 提炼专名与引述段落；派调研子代理把结果写入 `_context/research/`；主代理读调研文件后编辑 `_context/brief.md` 和 `_context/glossary.md`
-3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 主代理对照简报/术语表**定点 Edit** 纠错、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
-4. 派翻译子代理（先读 `_context/brief.md`、`_context/glossary.md`、规范）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
-5. 派复核子代理（先复制再定点 Edit）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
-6. 跑 `resplit` 切回观看用分条 → `{stem}_<lang>_split.srt`
-7. 主代理抽查终稿，向用户报告产出路径、术语表、修正要点
+2. 跑 `kb_tools.py match` 加载知识库、读 `index.md` 与命中领域包 → 问清原始/目标语言、视频日期、主题、各说话人是谁、是否调研 → 通读 `{stem}.srt` 写 `brief.md` 与 `gaps.md` → 派 1 个补缺调研子代理写 `_context/research/` → 跑 `kb_tools.py glossary` 生成术语表并填「本次新增」
+3. 跑 `merge` → 复制为 `{stem}_fix.srt` → 跑 `speakers`（占位标签 `--map` 换真名，单说话人 `--drop` 去前缀）→ 跑 `kb_tools.py replace` 做别名替换 → 主代理对照简报/术语表**定点 Edit** 纠错（含 replace 列出的待确认项）、给超长条目补句读 → 跑 `split`（没跑 `split` 则跑 `normalize`）
+4. 派翻译子代理（先读规范、translation-style、`brief.md`、`glossary.md`、领域 `style.md`）→ 只写 `编号<TAB>译文` 的 `{stem}_<lang>.txt`，主代理跑 `apply` 贴回时间轴 → `{stem}_<lang>.srt`，再跑 `check`
+5. 派复核子代理（先复制再定点 Edit，写 `review_notes.md`）→ `{stem}_<lang>_fix.srt`，跑 `clean` + `check`（时间轴被改坏用 `check --fix-timeline` 直接覆盖）；主代理自己也要读一遍译文，别全信复核代理
+6. 跑 `resplit` 切回观看用分条 → `{stem}_<lang>_split.srt`；跑 `provenance` 把插值数量告知用户，由用户定交付哪一份
+7. 主代理抽查终稿，向用户报告产出路径、术语表、修正要点、插值点数
+8. 派沉淀子代理写 `sediment_proposal.json` → 跑 `kb_tools.py apply` → 摘要给用户确认后 commit 知识库
 """
 
 BRIEF_MD_TEMPLATE = """# 背景简报 — {stem}
@@ -858,17 +864,57 @@ BRIEF_MD_TEMPLATE = """# 背景简报 — {stem}
 
 ## 专名
 
-（待填）
+（待填；标出哪些库里已有、哪些是本次新增）
 
 ## 疑似听录错误
 
-（待填）
+（待填；别名表没覆盖的，附条目号与上下文）
+
+## 引述段落
+
+（待填；朗读来信、复述他人发言的起止条目号与被引述者）
+
+## 风格基调
+
+（待填；体裁；按条目号区间标语域：旁白 / 新闻 / 街访 / 来信朗读；原文的梗在哪）
+
+## 外语插播段
+
+（有则逐条列出原文与语义，无则写"无"）
 """
 
 GLOSSARY_MD_TEMPLATE = """# 术语表 — {stem}
 
-> 占位文件。第 2 步调研完成后，由主代理编辑替换本内容。
+> 占位文件。第 2e 步由 `kb_tools.py glossary` 覆盖生成「来自知识库」一节，主代理再填「本次新增」。
 > 格式：`原语言写法 → 目标语言标准译名`，查不到标"自拟"。
+
+## 来自知识库
+
+（待生成）
+
+## 本次新增
+
+（待填）
+"""
+
+GAPS_MD_TEMPLATE = """# 缺口清单 — {stem}
+
+> 第 2c 步由主代理填写：只列知识库里没有的。每项一行：原文写法 / 出现条目号 / 你猜它是什么。
+> 补缺调研子代理只查这里的项。为空或很少时建议用户跳过调研。
+
+## 库里没有的人名 / 作品 / 节目 / 组织
+
+（待填）
+
+## 库里有但 volatile 可能过期的
+
+（待填）
+
+## 需要核实的近期事件
+
+（待填）
+
+## 疑似 ASR 错听但别名表没覆盖的
 
 （待填）
 """
@@ -892,11 +938,13 @@ def init_workspace(original_srt):
     (workdir / "AGENTS.md").write_text(AGENTS_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
     (context / "brief.md").write_text(BRIEF_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
     (context / "glossary.md").write_text(GLOSSARY_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
+    (context / "gaps.md").write_text(GAPS_MD_TEMPLATE.format(stem=stem), encoding="utf-8", newline="\n")
     print(f"OK: workspace created -> {workdir}")
     print(f"  - {workdir / src.name}")
     print(f"  - {workdir / 'AGENTS.md'}")
     print(f"  - {context / 'brief.md'} (placeholder)")
     print(f"  - {context / 'glossary.md'} (placeholder)")
+    print(f"  - {context / 'gaps.md'} (placeholder)")
     print(f"  - {research} (empty)")
 
 
