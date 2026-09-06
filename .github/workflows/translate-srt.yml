@@ -1,0 +1,35 @@
+name: translate-srt
+
+on:
+  pull_request:
+    paths:
+      - "skills/translate-srt/**"
+      - ".github/workflows/translate-srt.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/translate-srt/**"
+      - ".github/workflows/translate-srt.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: SRT self-test
+        run: python -B skills/translate-srt/scripts/srt_tools.py --self-test
+      - name: Knowledge-base self-test
+        run: python -B skills/translate-srt/scripts/kb_tools.py --self-test
+      - name: Knowledge-base regressions
+        run: python -X utf8 -B -m unittest discover -s skills/translate-srt/tests -v

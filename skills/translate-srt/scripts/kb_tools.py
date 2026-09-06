@@ -12,6 +12,7 @@
   python kb_tools.py check                             # 校验知识库格式(列数、重复、短别名、别名是 canonical 子串等)
   python kb_tools.py match in.srt [-o hits.json]       # SRT × 知识库:命中清单、领域建议、未覆盖的片假名/拉丁词候选
   python kb_tools.py replace in.srt [-o out.srt]       # 把 mode=auto 的 asr_variants 换成 canonical;ask 的只报位置
+  python kb_tools.py remap-log in.srt --log log.tsv    # 整平后按时间戳更新日志中的 current_entries
   python kb_tools.py glossary in.srt -o glossary.md    # 从命中条目生成本次专用术语表(可 -d 指定领域、--video-date 判 volatile)
   python kb_tools.py backfill DIR... -o staging.md     # 扫历史项目的 _context/,汇总成沉淀素材
   python kb_tools.py apply proposal.json [--commit]    # 把沉淀提案合并进知识库;译法冲突不覆盖、单列 CONFLICT
@@ -21,6 +22,7 @@
 import argparse
 import csv
 import datetime as dt
+import difflib
 import io
 import json
 import os
@@ -38,6 +40,8 @@ from srt_tools import parse, serialize, _split_speaker  # noqa: E402
 ALIAS_COLUMNS = ["canonical", "asr_variants", "translation", "domain", "type", "mode", "notes"]
 ALIAS_TYPES = {"person", "character", "work", "show", "team", "term", "org", "place", "event", "nickname"}
 ALIAS_MODES = {"auto", "ask"}
+ALIAS_LOG_COLUMNS = ["entry", "variant", "canonical", "status", "start_ms", "end_ms",
+                     "source_text", "current_entries"]
 DOMAIN_FILES = ["entities.md", "glossary.md", "style.md", "sources.md"]
 # 别名短于这个显示长度就不该 auto:日语子串匹配没有词边界,两三个字的片假名/汉字到处撞
 AUTO_MIN_LEN = 3
@@ -262,6 +266,32 @@ def load_domain(kb, domain):
     }
 
 
+def _known_translation(value):
+    value = (value or "").strip()
+    return "" if value == "(未定)" else value
+
+
+def _identity_names(name):
+    # Canonical/title variants identify an entity; nicknames need not be unique.
+    return {name.strip()} | {part for part in SEP_RE.split(name.strip()) if part}
+
+
+def _translation_records(kb):
+    for row in load_aliases(kb):
+        translation = _known_translation(row["translation"])
+        if translation:
+            yield (row["domain"], {row["canonical"]}, translation,
+                   f"aliases.tsv:{row['_line']} {row['canonical']}")
+    for domain in domains_of(kb):
+        data = load_domain(kb, domain)
+        for kind, field in (("entities", "译名"), ("glossary", "译法")):
+            for section in data[kind]:
+                translation = _known_translation(section["fields"].get(field))
+                if translation:
+                    yield (domain, _identity_names(section["name"]), translation,
+                           f"{domain}/{kind}.md {section['name']}")
+
+
 # ---------------------------------------------------------------- init / status / check
 
 def init(home_arg=None):
@@ -383,6 +413,15 @@ def check(kb=None, quiet=False):
                     warns.append(f"{dom}/entities.md {s['name']}: no 译名 field")
                 if kind == "glossary" and "译法" not in s["fields"]:
                     warns.append(f"{dom}/glossary.md {s['name']}: no 译法 field")
+    translations = {}
+    for domain, names, translation, where in _translation_records(kb):
+        for name in sorted(names):
+            previous = translations.get((domain, name))
+            if previous and previous[0] != translation:
+                problems.append(f"{where}: translation {translation!r} conflicts with "
+                                f"{previous[0]!r} in {previous[1]} [{domain}/{name}]")
+            else:
+                translations[(domain, name)] = (translation, where)
     if not quiet:
         for p in problems:
             print(f"ERROR {p}")
@@ -421,6 +460,26 @@ def build_patterns(kb, domains=None):
     return pats
 
 
+def matching_spans(text, pats):
+    """Claim longest surfaces in the original text; correct forms win equal-length ties."""
+    claimed, spans = [False] * len(text), []
+    for pattern in sorted(pats, key=lambda p: (-len(p["surface"]), p["is_variant"])):
+        surface = pattern["surface"]
+        if not surface:
+            continue
+        start = 0
+        while True:
+            pos = text.find(surface, start)
+            if pos < 0:
+                break
+            end = pos + len(surface)
+            if not any(claimed[pos:end]):
+                claimed[pos:end] = [True] * len(surface)
+                spans.append((pos, end, pattern))
+            start = pos + 1
+    return sorted(spans, key=lambda span: span[0])
+
+
 def match_entries(entries, pats):
     """返回 {canonical: {..., count, entries[], matched{surface: count}}},按 count 降序。"""
     hits = {}
@@ -429,23 +488,8 @@ def match_entries(entries, pats):
     for p in pats:
         if p["kind"] == "alias" or p["canonical"] not in meta:
             meta[p["canonical"]] = p
-    # 长写法先匹配并占住区间,短写法不再命中已占用的位置:否则 `あきほ` 会在 `鈴本あきほ` 里重复计数
-    ordered = sorted(pats, key=lambda p: -len(p["surface"]))
     for i, e in enumerate(entries, 1):
-        text = e["text"]
-        claimed = [False] * len(text)
-        for p in ordered:
-            n, start, L = 0, 0, len(p["surface"])
-            while True:
-                pos = text.find(p["surface"], start)
-                if pos < 0:
-                    break
-                if not any(claimed[pos:pos + L]):
-                    claimed[pos:pos + L] = [True] * L
-                    n += 1
-                start = pos + 1
-            if not n:
-                continue
+        for _, _, p in matching_spans(e["text"], pats):
             m = meta[p["canonical"]]
             h = hits.setdefault(p["canonical"], {
                 "canonical": p["canonical"], "domain": m["domain"], "kind": m["kind"], "mode": m["mode"],
@@ -454,10 +498,10 @@ def match_entries(entries, pats):
                 "type": m["row"]["type"] if m["kind"] == "alias" else m["kind"],
                 "count": 0, "entries": [], "matched": {}, "variant_entries": [],
             })
-            h["count"] += n
+            h["count"] += 1
             if i not in h["entries"]:
                 h["entries"].append(i)
-            h["matched"][p["surface"]] = h["matched"].get(p["surface"], 0) + n
+            h["matched"][p["surface"]] = h["matched"].get(p["surface"], 0) + 1
             if p["is_variant"] and i not in h["variant_entries"]:
                 h["variant_entries"].append(i)
     return dict(sorted(hits.items(), key=lambda kv: -kv[1]["count"]))
@@ -527,22 +571,32 @@ def match(srt_path, out=None, domains=None, show_candidates=True):
 
 def replace(srt_path, out=None, domains=None, log=None):
     kb = require_kb()
-    rows = [r for r in load_aliases(kb) if not domains or r["domain"] in domains]
+    if check(kb, quiet=True):
+        sys.exit("ERROR: knowledge base fails `check`; fix it before replacing subtitles")
+    pats = build_patterns(kb, domains)
     text = Path(srt_path).read_text(encoding="utf-8-sig")
     entries = parse(text)
-    auto = {v: r["canonical"] for r in rows if r["mode"] == "auto" for v in r["variants"] if v and v not in r["canonical"]}
-    ask = {v: r["canonical"] for r in rows if r["mode"] == "ask" for v in r["variants"] if v}
-    rx = re.compile("|".join(re.escape(v) for v in sorted(auto, key=len, reverse=True))) if auto else None
-    changes, asks = [], []
+    if not entries:
+        sys.exit("ERROR: no subtitle entries parsed")
+    changes, asks, records = [], [], []
     for i, e in enumerate(entries, 1):
-        if rx:
-            def sub(m):
-                changes.append((i, m.group(0), auto[m.group(0)]))
-                return auto[m.group(0)]
-            e["text"] = rx.sub(sub, e["text"])
-        for v, c in ask.items():
-            if v in e["text"]:
-                asks.append((i, v, c))
+        original = e["text"]
+        pieces, cursor = [], 0
+        for start, end, pattern in matching_spans(original, pats):
+            if pattern["kind"] != "alias" or not pattern["is_variant"]:
+                continue
+            variant, canonical, mode = pattern["surface"], pattern["canonical"], pattern["mode"]
+            records.append({"entry": i, "variant": variant, "canonical": canonical, "status": mode,
+                            "start_ms": e["start"], "end_ms": e["end"], "source_text": original,
+                            "current_entries": str(i)})
+            if mode == "auto":
+                changes.append((i, variant, canonical))
+                pieces.extend((original[cursor:start], canonical))
+                cursor = end
+            else:
+                asks.append((i, variant, canonical))
+        pieces.append(original[cursor:])
+        e["text"] = "".join(pieces)
     dest = out or srt_path
     _write(Path(dest), serialize(entries))
     print(f"OK: {len(entries)} entries -> {dest}")
@@ -558,27 +612,71 @@ def replace(srt_path, out=None, domains=None, log=None):
             ents = [str(i) for i in sorted({i for i, vv, _ in asks if vv == v})][:8]
             print(f"    {v} -> {c}?  x{n}  #{', #'.join(ents)}{' ...' if n > 8 else ''}")
     if log:
-        lines = ["entry\tvariant\tcanonical\tstatus"]
-        lines += [f"{i}\t{v}\t{c}\tauto" for i, v, c in changes]
-        lines += [f"{i}\t{v}\t{c}\task" for i, v, c in asks]
-        _write(Path(log), "\n".join(lines) + "\n")
+        _write_alias_log(Path(log), records)
         print(f"OK: log -> {log}")
     return 0
+
+
+def _write_alias_log(path, rows):
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=ALIAS_LOG_COLUMNS, delimiter="\t", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    _write(path, buf.getvalue())
+
+
+def remap_log(srt_path, log, out=None):
+    """Map immutable time spans to current entry numbers after merge/split/deletion."""
+    entries = parse(Path(srt_path).read_text(encoding="utf-8-sig"))
+    if not entries:
+        print("ERROR: no subtitle entries parsed; log was not changed")
+        return 2
+    try:
+        with open(log, encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream, delimiter="\t")
+            if reader.fieldnames != ALIAS_LOG_COLUMNS:
+                raise ValueError("log must include timestamp anchors from the current replace command")
+            rows = list(reader)
+        unmatched = []
+        for number, row in enumerate(rows, 1):
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(f"malformed log row {number}")
+            start, end = int(row["start_ms"]), int(row["end_ms"])
+            if end <= start:
+                raise ValueError(f"invalid time span in log row {number}")
+            current = [str(i) for i, entry in enumerate(entries, 1)
+                       if entry["start"] < end and entry["end"] > start]
+            row["current_entries"] = ";".join(current)
+            if not current:
+                unmatched.append(number)
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: {exc}; log was not changed")
+        return 2
+    destination = out or log
+    _write_alias_log(Path(destination), rows)
+    print(f"OK: mapped {len(rows)} log records against {srt_path} -> {destination}")
+    if unmatched:
+        print(f"WARN: no current entry overlaps log rows {unmatched}; inspect source_text for deleted/moved content")
+    return 1 if unmatched else 0
 
 
 # ---------------------------------------------------------------- glossary
 
 def build_glossary(srt_path, out, domains=None, video_date=None, stem=None):
     kb = require_kb()
+    if check(kb, quiet=True):
+        sys.exit("ERROR: knowledge base fails `check`; fix it before building a glossary")
     cfg = load_config()
     months = int(cfg.get("volatile_recheck_months", 3))
     vdate = dt.date.fromisoformat(video_date) if video_date else dt.date.today()
     entries = parse(Path(srt_path).read_text(encoding="utf-8-sig"))
-    all_pats = build_patterns(kb, None)
-    hits_all = match_entries(entries, all_pats)
     if not domains:
+        hits_all = match_entries(entries, build_patterns(kb))
         domains = sorted({h["domain"] for h in hits_all.values()})
-    hits = {k: h for k, h in hits_all.items() if h["domain"] in domains}
+    domains = list(dict.fromkeys(domains))
+    # Match each selected domain independently so homographs cannot consume another domain's hits.
+    domain_hits = {dom: match_entries(entries, build_patterns(kb, [dom])) for dom in domains}
+    hits = [hit for selected in domain_hits.values() for hit in selected.values()]
     stem = stem or Path(srt_path).stem
     alias_rows = {r["canonical"]: r for r in load_aliases(kb)}
     md = [f"# 术语表 — {stem}", "",
@@ -587,7 +685,7 @@ def build_glossary(srt_path, out, domains=None, video_date=None, stem=None):
           "> 「本次新增」一节由主代理在第 2d 步填写:本次调研新得的译名、自拟译名、听众昵称等。",
           "> 术语表须覆盖字幕中出现的每个专名(说话人名也在其中),查不到标「自拟」。", ""]
     md += ["## 来自知识库", ""]
-    alias_hits = [h for h in hits.values() if h["kind"] == "alias"]
+    alias_hits = [h for h in hits if h["kind"] == "alias"]
     md += ["### 专名", ""]
     if alias_hits:
         md += ["| 原文 | 译名 | 类型 | 出现 | ASR 常见错听 | 备注 |", "| --- | --- | --- | --- | --- | --- |"]
@@ -602,8 +700,7 @@ def build_glossary(srt_path, out, domains=None, video_date=None, stem=None):
     for dom in domains:
         d = load_domain(kb, dom)
         for kind, title in (("entities", "人物/作品档案"), ("glossary", "术语")):
-            secs = [s for s in d[kind] if any(n in hits for n in [s["name"]] + section_names(s))
-                    or s["name"] in hits]
+            secs = [s for s in d[kind] if any(n in domain_hits[dom] for n in [s["name"]] + section_names(s))]
             if not secs:
                 continue
             md += [f"### {title}({dom})", ""]
@@ -669,15 +766,166 @@ def _norm_list(v):
     return [str(x).strip() for x in v if str(x).strip()]
 
 
+def _validate_proposal_paths(kb, prop):
+    """A domain is one directory name, never a path out of the candidate tree."""
+    if not isinstance(prop, dict):
+        raise ValueError("proposal must be a JSON object")
+    for kind in ("index", "aliases", "entities", "glossary", "sources", "style"):
+        items = prop.get(kind, [])
+        if not isinstance(items, list) or any(not isinstance(it, dict) for it in items):
+            raise ValueError(f"{kind} must be an array of objects")
+        for it in items:
+            domain = it.get("domain")
+            if domain is None and kind == "aliases":
+                continue  # Existing aliases may be updated by canonical alone.
+            if (not isinstance(domain, str) or not domain or domain.startswith(".")
+                    or domain != domain.strip() or any(c in domain for c in '/\\:<>|?*"\r\n\0')
+                    or not (kb / domain).resolve().is_relative_to(kb.resolve())):
+                raise ValueError(f"invalid domain directory: {domain!r}")
+
+
+def _snapshot_files(root):
+    """Capture the working files, excluding Git metadata and refusing linked paths."""
+    snapshot = {}
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = [name for name in dirs if name != ".git"]
+        for name in dirs + files:
+            path = Path(directory) / name
+            if name != ".git" and (path.is_symlink()
+                                  or not path.resolve().is_relative_to(root.resolve())):
+                raise ValueError(f"knowledge base contains a linked path: {path}")
+        for name in files:
+            if name != ".git":
+                path = Path(directory) / name
+                snapshot[path.relative_to(root)] = path.read_bytes()
+    return snapshot
+
+
+def _replace_bytes(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".kb-write-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _publish_snapshot(kb, before, after):
+    if _snapshot_files(kb) != before:
+        raise RuntimeError("knowledge base changed during apply; retry against the current files")
+    changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
+    written, new_dirs = [], set()
+    try:
+        for relative in changed:
+            path = kb / relative
+            for parent in path.parents:
+                if parent == kb:
+                    break
+                if not parent.exists():
+                    new_dirs.add(parent)
+            if relative in after:
+                _replace_bytes(path, after[relative])
+            else:
+                path.unlink()
+            written.append(relative)
+    except OSError:
+        for relative in reversed(written):
+            if relative in before:
+                _replace_bytes(kb / relative, before[relative])
+            else:
+                (kb / relative).unlink(missing_ok=True)
+        for directory in sorted(new_dirs, key=lambda p: len(p.parts), reverse=True):
+            if directory.exists():
+                directory.rmdir()
+        raise
+
+
 def apply_proposal(proposal_path, commit=False, summary_out=None):
     kb = require_kb()
     if check(kb, quiet=True):
         sys.exit("ERROR: knowledge base fails `check`; fix it before applying a proposal")
-    prop = json.loads(Path(proposal_path).read_text(encoding="utf-8-sig"))
-    project = prop.get("project", Path(proposal_path).parent.parent.name)
-    date = prop.get("date", dt.date.today().isoformat())
-    source_tag = f"{project} ({date})"
+    try:
+        prop = json.loads(Path(proposal_path).read_text(encoding="utf-8-sig"))
+        _validate_proposal_paths(kb, prop)
+        project = prop.get("project", Path(proposal_path).parent.parent.name)
+        date = prop.get("date", dt.date.today().isoformat())
+        source_tag = f"{project} ({date})"
+        before = _snapshot_files(kb)
+        with tempfile.TemporaryDirectory(prefix=".translate-srt-apply-", dir=kb.parent) as temporary:
+            candidate = Path(temporary) / "knowledge"
+            candidate.mkdir()
+            for relative, data in before.items():
+                path = candidate / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            added, updated, conflicts, skipped = _merge_proposal(candidate, prop, source_tag)
+            if check(candidate, quiet=True):
+                check(candidate)
+                message = "ERROR: proposal fails validation; knowledge base and Git index were not changed"
+                print(message)
+                if summary_out:
+                    _write(Path(summary_out), f"# 沉淀失败 — {source_tag}\n\n{message}\n")
+                return 2
+            _publish_snapshot(kb, before, _snapshot_files(candidate))
+    except (KeyError, TypeError, ValueError, OSError, RuntimeError) as exc:
+        print(f"ERROR: apply failed: {exc}")
+        return 2
+
+    lines = [f"# 沉淀结果 — {source_tag}", "",
+             f"新增 {len(added)} · 更新 {len(updated)} · 冲突 {len(conflicts)} · 跳过 {len(skipped)}", ""]
+    for title, items in (("## CONFLICT(未写入,需要你裁决)", conflicts), ("## 新增", added),
+                         ("## 更新", updated), ("## 跳过", skipped)):
+        if items:
+            lines += [title, ""] + [f"- {x}" for x in items] + [""]
+    summary = "\n".join(lines)
+    print(summary)
+    if summary_out:
+        _write(Path(summary_out), summary + "\n")
+        print(f"OK: summary -> {summary_out}")
+    if commit:
+        state = _git(kb, "status", "--porcelain", check=True)
+        if state is None:
+            print("ERROR: git not found; validated changes remain uncommitted")
+            return 2
+        if state.stdout:
+            _git(kb, "add", "-A", check=True)
+            result = _git(kb, "commit", "-q", "-m", f"kb: sediment from {source_tag}")
+            if result is None or result.returncode:
+                print(f"ERROR: commit failed; validated changes remain uncommitted:\n{result.stderr if result else ''}")
+                return 2
+            print("OK: committed")
+        else:
+            print("OK: no changes to commit")
+    else:
+        print(f"next: review `kb_tools.py diff`, then commit the knowledge base at {kb}")
+    return 1 if conflicts else 0
+
+
+def _merge_proposal(kb, prop, source_tag):
+    """Merge only into a disposable candidate; the caller validates before publishing."""
     added, updated, conflicts, skipped = [], [], [], []
+    translations = {}
+    for domain, names, translation, where in _translation_records(kb):
+        for name in names:
+            translations[(domain, name)] = (translation, where)
+
+    def resolve_translation(domain, name, value, where, title=True):
+        proposed = _known_translation(value)
+        names = _identity_names(name) if title else {name}
+        known = {translations[(domain, n)] for n in names if (domain, n) in translations}
+        values = {translation for translation, _ in known}
+        if len(values) > 1 or (proposed and values and proposed not in values):
+            details = "; ".join(f"{translation!r} in {origin}" for translation, origin in sorted(known))
+            conflicts.append(f"{where}: KB translation {details} vs proposal {proposed!r} "
+                             f"({source_tag}) -- kept KB; conflicting translation not written")
+            return False, ""
+        accepted = proposed or next(iter(values), "")
+        if accepted:
+            for n in names:
+                translations[(domain, n)] = (accepted, where)
+        return True, accepted
 
     # 新领域
     for dom in prop.get("index", []):
@@ -703,10 +951,10 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
         variants = [v for v in _norm_list(a.get("asr_variants")) if v and v != canon and v not in canon]
         if canon in by_canon:
             r = by_canon[canon]
-            if a.get("translation") and r["translation"] and a["translation"].strip() != r["translation"]:
-                conflicts.append(f"alias {canon}: KB translation {r['translation']!r} vs proposal {a['translation']!r} ({source_tag}) -- kept KB")
-            elif a.get("translation") and not r["translation"]:
-                r["translation"] = a["translation"].strip()
+            accepted, translation = resolve_translation(r["domain"], canon, a.get("translation"),
+                                                        f"alias {canon}", title=False)
+            if accepted and translation and not _known_translation(r["translation"]):
+                r["translation"] = translation
                 updated.append(f"alias {canon}: translation set to {r['translation']!r}")
             new_v = [v for v in variants if v not in r["variants"] and variant_owner.get(v, canon) == canon]
             for v in variants:
@@ -717,6 +965,9 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
                 for v in new_v:
                     variant_owner[v] = canon
                 updated.append(f"alias {canon}: +variants {new_v}")
+            if r["mode"] == "auto" and (a.get("mode") == "ask" or (new_v and a.get("mode") != "auto")):
+                r["mode"] = "ask"
+                updated.append(f"alias {canon}: mode auto -> ask (variants require confirmation)")
             if a.get("mode") == "auto" and r["mode"] == "ask":
                 r["mode"] = "auto"
                 updated.append(f"alias {canon}: mode ask -> auto")
@@ -736,6 +987,11 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
             if not (kb / r["domain"] / "entities.md").exists():
                 skipped.append(f"alias {canon}: unknown domain {r['domain']!r}")
                 continue
+            accepted, translation = resolve_translation(r["domain"], canon, r["translation"],
+                                                        f"alias {canon}", title=False)
+            if not accepted:
+                continue
+            r["translation"] = translation
             rows.append(r)
             by_canon[canon] = r
             for v in variants:
@@ -762,12 +1018,11 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
             head = text.split("\n### ", 1)[0].rstrip() + "\n\n" if "### " in text else text.rstrip() + "\n\n"
             for it in its:
                 name = it[name_key].strip()
-                tr = (it.get("translation") or "").strip()
                 if name in by_name:
                     s = by_name[name]
-                    old = s["fields"].get(key_field, "")
-                    if tr and old and tr != old:
-                        conflicts.append(f"{kind} {name}: KB {key_field} {old!r} vs proposal {tr!r} ({source_tag}) -- kept KB")
+                    accepted, tr = resolve_translation(dom, s["name"], it.get("translation"), f"{kind} {name}")
+                    if accepted and tr and not _known_translation(s["fields"].get(key_field)):
+                        _set_field(s, key_field, tr)
                     extra = []
                     for al in _norm_list(it.get("aliases")):
                         if al not in section_names(s) and al != name:
@@ -785,6 +1040,9 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
                             _set_field(s, "稳定性", it["stability"])
                     updated.append(f"{kind} {name}" + (f": +别名 {extra}" if extra else ": appended"))
                 else:
+                    accepted, tr = resolve_translation(dom, name, it.get("translation"), f"{kind} {name}")
+                    if not accepted:
+                        continue
                     lines = []
                     if kind == "entities":
                         lines.append(f"- 类型: {it.get('type', 'person')}")
@@ -800,7 +1058,7 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
                     st = it.get("stability", "stable")
                     lines.append(f"- 稳定性: {st if STABILITY_RE.match(st or '') else 'stable'}")
                     lines.append(f"- 来源: {source_tag}")
-                    s = {"name": name, "fields": {}, "lines": lines, "order": []}
+                    s = parse_sections(f"### {name}\n" + "\n".join(lines))[0]
                     secs.append(s)
                     by_name[name] = s
                     added.append(f"{kind} {name} -> {tr or '?'} [{dom}]")
@@ -851,28 +1109,7 @@ def apply_proposal(proposal_path, commit=False, summary_out=None):
         _write(path, text)
         added.append(f"style [{st['domain']}/{section}]: {body[:40]}")
 
-    if check(kb, quiet=True):
-        print("WARN: knowledge base fails `check` after apply -- run `kb_tools.py check` and fix, or `git checkout -- .` to undo")
-
-    lines = [f"# 沉淀结果 — {source_tag}", "",
-             f"新增 {len(added)} · 更新 {len(updated)} · 冲突 {len(conflicts)} · 跳过 {len(skipped)}", ""]
-    for title, items in (("## CONFLICT(未写入,需要你裁决)", conflicts), ("## 新增", added),
-                         ("## 更新", updated), ("## 跳过", skipped)):
-        if items:
-            lines += [title, ""] + [f"- {x}" for x in items] + [""]
-    summary = "\n".join(lines)
-    print(summary)
-    if summary_out:
-        _write(Path(summary_out), summary + "\n")
-        print(f"OK: summary -> {summary_out}")
-    if commit:
-        _git(kb, "add", "-A", check=True)
-        r = _git(kb, "commit", "-q", "-m", f"kb: sediment from {source_tag}")
-        print("OK: committed" if r and r.returncode == 0 else f"WARN: nothing to commit or commit failed:\n{r.stderr if r else ''}")
-    else:
-        print(f"next: review `git -C {kb} diff`, then `git -C {kb} add -A && git -C {kb} commit -m \"kb: sediment from {project}\"`"
-              f"  (or `git -C {kb} checkout -- . && git -C {kb} clean -fd` to discard)")
-    return 1 if conflicts else 0
+    return added, updated, conflicts, skipped
 
 
 def _set_field(sec, key, value):
@@ -892,12 +1129,22 @@ def diff():
         sys.exit("ERROR: knowledge base is not a git repo")
     print(f"knowledge: {kb}")
     print(r.stdout or "clean\n")
-    r = _git(kb, "diff", "--stat")
-    if r.stdout:
-        print(r.stdout)
-    r = _git(kb, "diff")
-    if r.stdout:
-        print(r.stdout)
+    for label, options in (("staged", ("--cached",)), ("unstaged", ())):
+        r = _git(kb, "diff", "--no-ext-diff", "--no-color", *options, check=True)
+        if r.stdout:
+            print(f"--- {label} ---")
+            print(r.stdout)
+    untracked = _git(kb, "ls-files", "--others", "--exclude-standard", "-z", check=True)
+    for name in filter(None, untracked.stdout.split("\0")):
+        path = kb / name
+        print(f"--- untracked: {name} ---")
+        try:
+            content = path.read_text(encoding="utf-8-sig")
+        except UnicodeError:
+            print(f"Binary file: {name}")
+            continue
+        print("".join(difflib.unified_diff([], content.splitlines(keepends=True),
+                                         fromfile="/dev/null", tofile=f"b/{name}")))
     return 0
 
 
@@ -942,6 +1189,11 @@ def self_test():
         assert apply_proposal(str(pp)) == 1
         r = {r["canonical"]: r for r in load_aliases(kb)}["涼本あきほ"]
         assert r["translation"] == "凉本秋穗" and "涼元あきほ" in r["variants"]
+        assert r["mode"] == "ask"  # A new unconfirmed variant downgrades the whole row.
+        _write(pp, json.dumps({"project": "t3", "aliases": [
+            {"canonical": "涼本あきほ", "domain": "seiyuu", "mode": "auto"}
+        ]}, ensure_ascii=False))
+        assert apply_proposal(str(pp)) == 0  # Explicit confirmation can promote it again.
         ent = load_domain(kb, "seiyuu")["entities"][0]
         assert "あきほ" in section_names(ent) and any("新补充" in l for l in ent["lines"])
         # match / replace / glossary
@@ -986,13 +1238,13 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", nargs="?", choices=["init", "status", "check", "match", "replace", "glossary",
+    ap.add_argument("mode", nargs="?", choices=["init", "status", "check", "match", "replace", "remap-log", "glossary",
                                                 "backfill", "apply", "diff"])
     ap.add_argument("inputs", nargs="*", help="match/replace/glossary: in.srt;backfill: 目录;apply: proposal.json")
     ap.add_argument("-o", "--output")
     ap.add_argument("-d", "--domain", action="append", help="只用这些领域包(可重复);缺省全部/按命中自动选")
     ap.add_argument("--home", help="init: home 目录(缺省 $TRANSLATE_SRT_HOME 或 ~/.translate-srt)")
-    ap.add_argument("--log", help="replace: 把替换/待确认清单写成 TSV")
+    ap.add_argument("--log", help="replace: 写带时间戳的 TSV;remap-log: 更新这份日志的 current_entries")
     ap.add_argument("--video-date", help="glossary: 视频日期 YYYY-MM-DD,判 volatile 条目是否过期(缺省今天)")
     ap.add_argument("--stem", help="glossary: 标题里用的项目名(缺省取 srt 词干)")
     ap.add_argument("--no-candidates", action="store_true", help="match: 不列未覆盖的片假名/拉丁词")
@@ -1018,6 +1270,10 @@ def main():
         return sys.exit(match(args.inputs[0], args.output, args.domain, not args.no_candidates))
     if args.mode == "replace":
         return sys.exit(replace(args.inputs[0], args.output, args.domain, args.log))
+    if args.mode == "remap-log":
+        if not args.log:
+            ap.error("remap-log needs --log <alias_log.tsv>")
+        return sys.exit(remap_log(args.inputs[0], args.log, args.output))
     if args.mode == "glossary":
         if not args.output:
             ap.error("glossary needs -o <glossary.md>")
